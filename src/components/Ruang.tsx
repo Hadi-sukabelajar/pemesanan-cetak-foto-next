@@ -27,7 +27,9 @@ export async function Ruang({
   return (
     <>
       <Topbar u={u} aktif={aktif} namaSekolah={sekolah} csrf={csrf} aksiKeluar={aksiKeluar} />
-      <main className={`wrap${lebar ? ' wide' : ''}`}>{children}</main>
+      <main className={`wrap${lebar ? ' wide' : ''}`} aria-label={judul}>
+        {children}
+      </main>
       <Footer
         namaSekolah={sekolah}
         judulAcara={judulAcara(set)}

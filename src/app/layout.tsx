@@ -1,8 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
-import { AmbilFlash } from '@/components/AmbilFlash';
+import { FlashList } from '@/components/FlashList';
+import { ambilFlash } from '@/lib/flash';
+import { KonfirmasiDanger } from '@/components/KonfirmasiDanger';
 import { BodyClass } from '@/components/BodyClass';
+import { DaftarkanServiceWorker } from '@/components/DaftarkanServiceWorker';
 
 const font = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -38,14 +41,18 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default function RootLayout({ children }: LayoutProps<'/'>) {
+export default async function RootLayout({ children }: LayoutProps<'/'>) {
+  const flash = await ambilFlash();
+
   return (
     <html lang="id" className={font.variable}>
       <body>
         {/* Menambahkan kelas "admin-body" ke <body> sesuai rute, karena
             desain admin memakai sidebar di layar lebar. */}
         <BodyClass />
-        <AmbilFlash />
+        <KonfirmasiDanger />
+        <FlashList daftar={flash} />
+        <DaftarkanServiceWorker />
         {children}
       </body>
     </html>

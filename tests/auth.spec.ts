@@ -54,8 +54,25 @@ test.describe('Autentikasi', () => {
   });
 
   test('email tak dikenal ditolak', async ({ page }) => {
-    await masuk(page, 'tidakada@sekolah.test', 'apa saja');
+    // Email unik per-jalur: pembatas percobaanlogin sengaja bertahan
+    // beberapa menit, jadi email yang sama akan tersedekati dari run sebelumnya.
+    await masuk(page, `tidakada${Date.now()}@sekolah.test`, 'apa saja');
     await expect(page.locator('.alert.a-bad')).toContainText(/salah/i);
+  });
+
+  test('pembatas percobaan login aktif', async ({ page }) => {
+    const email = `limit${Date.now()}@sekolah.test`;
+    // Enam percobaan gagal beruntun dari alamat yang sama harus dihentikan.
+    for (let i = 1; i <= 6; i++) {
+      await masuk(page, email, 'salahlagi');
+      const alert = page.locator('.alert.a-bad');
+      await expect(alert).toBeVisible();
+      if (i === 6) {
+        await expect(alert).toContainText(/terlalu banyak/i);
+      } else {
+        await expect(alert).toContainText(/salah/i);
+      }
+    }
   });
 
   test('email & password kosong ditolak browser', async ({ page }) => {

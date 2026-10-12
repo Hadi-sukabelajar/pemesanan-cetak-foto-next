@@ -26,7 +26,7 @@ export default async function HalamanPesan({
 
   // Saat mengedit, pesanan HARUS milik pengguna ini.
   let edit = null;
-  let qtyAwal: Record<number, number> = {};
+  const qtyAwal: Record<number, number> = {};
   if (idEdit) {
     const db = getDb();
     const [p] = await db

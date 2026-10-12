@@ -1,0 +1,45 @@
+{
+  "name": "Foto Pelantikan",
+  "short_name": "Foto Pelantikan",
+  "description": "Pemesanan foto sesi pelantikan per kelas dan jurusan",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0e1a38",
+  "theme_color": "#0e1a38",
+  "lang": "id",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Pesan Foto",
+      "short_name": "Pesan",
+      "url": "/pesan"
+    },
+    {
+      "name": "Pesanan Saya",
+      "short_name": "Pesanan",
+      "url": "/pesanan-saya"
+    }
+  ]
+}

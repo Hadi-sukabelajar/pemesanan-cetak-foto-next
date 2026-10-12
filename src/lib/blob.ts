@@ -153,9 +153,46 @@ export async function hapusBlob(pathname: string | null | undefined): Promise<vo
  * (bukti/ atau hasil/), sehingga tidak bisa diselipkan lewat form.
  */
 export function validasiPathnameBukti(pathname: string): boolean {
-  return /^bukti\/[a-f0-9]{24}\.(jpg|png|webp|pdf)$/.test(pathname);
+  // Suffix acak dari Vercel Blob (addRandomSuffix) bisa beberapa panjang,
+  // jadi tidak dikunci ke jumlah digit tertentu.
+  return /^bukti\/[a-f0-9]{8,64}\.(jpg|png|webp|pdf)$/.test(pathname);
 }
 
 export function validasiPathnameHasil(pathname: string): boolean {
-  return /^hasil\/[a-f0-9]{24}\.(jpg|png|webp)$/.test(pathname);
+  return /^hasil\/[a-f0-9]{8,64}\.(jpg|png|webp)$/.test(pathname);
 }
+/** Aturan per jenis unggahan: batas ukuran, tipe konten, dan pola pathname. */
+export type AturanUnggah = {
+  maks: number;
+  tipe: string[];
+  valid: (pathname: string) => boolean;
+  label: string;
+};
+
+/**
+ * Normalisasi parameter `jenis` dari request.
+ * Nilai tak dikenal dikembalikan apa adanya supaya pemanggil bisa menolak.
+ */
+export function aturanUnggah(jenis: unknown): AturanUnggah | null {
+  if (jenis === 'bukti') {
+    return {
+      maks: BATAS_BUKTI,
+      tipe: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+      valid: validasiPathnameBukti,
+      label: 'Bukti transfer',
+    };
+  }
+  if (jenis === 'hasil') {
+    return {
+      maks: BATAS_FOTO,
+      // Foto hasil tidak boleh PDF: halamannya selalu menampilkan <img>.
+      tipe: ['image/jpeg', 'image/png', 'image/webp'],
+      valid: validasiPathnameHasil,
+      label: 'Foto hasil',
+    };
+  }
+  return null;
+}
+
+/** Daftar ekstensi gambar yang boleh untuk foto hasil (dipakai pesan galat). */
+export const EKSTENSI_GAMBAR = ['jpg', 'png', 'webp'] as const;

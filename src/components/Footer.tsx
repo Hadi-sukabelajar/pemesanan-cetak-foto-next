@@ -1,5 +1,4 @@
 import type { Pengguna } from '@/lib/db/schema';
-import { Brand } from './Topbar';
 
 export function Footer({
   namaSekolah,

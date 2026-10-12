@@ -9,7 +9,7 @@
  */
 import 'server-only';
 import { cookies } from 'next/headers';
-import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { cache } from 'react';
 import { eq, lt } from 'drizzle-orm';
 import { getDb } from '@/lib/db';

@@ -1,13 +1,17 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { NextResponse } from 'next/server';
-import { wajibLogin } from '@/lib/auth/rbac';
-import { BATAS_BUKTI, BATAS_FOTO } from '@/lib/blob';
+import { wajibLogin, wajibSiswa, wajibFoto } from '@/lib/auth/rbac';
+import { aturanUnggah } from '@/lib/blob';
 
 /**
  * Memberi token unggah untuk client-direct upload.
  *
  * Token hanya diberikan kalau pengguna benar-benar berhak mengunggah, jadi
  * proses otorisasi tetap di server walaupun berkasnya langsung ke storage.
+ *
+ * `jenis` menentukan siapa yang boleh mengunggah dan batas ukurannya:
+ *  - 'bukti' -> siswa/admin (bukti transfer, maks 2 MB, boleh PDF)
+ *  - 'hasil' -> admin/fotografer (foto hasil, maks 15 MB, hanya gambar)
  */
 export async function POST(request: Request) {
   try {
@@ -17,14 +21,23 @@ export async function POST(request: Request) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
-  const body = (await request.json()) as HandleUploadBody;
+  const raw = (await request.json()) as HandleUploadBody & { jenis?: unknown };
+  const aturan = aturanUnggah(raw.jenis ?? 'bukti');
+  if (!aturan) {
+    return NextResponse.json({ error: 'Jenis unggahan tidak dikenal.' }, { status: 400 });
+  }
 
-  // Batas 2 MB untuk bukti transfer, 15 MB untuk foto hasil.
-  // Folder tujuan ditentukan di dalam onBeforeGenerateToken.
-  const maks = BATAS_BUKTI;
+  // Otorisasi per jenis: siswa tidak boleh mengunggah foto hasil, dan
+  // fotografer tidak boleh mengunggah bukti transfer.
+  try {
+    if (aturan.label === 'Bukti transfer') await wajibSiswa();
+    else await wajibFoto();
+  } catch {
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
 
   const jsonResponse = await handleUpload({
-    body,
+    body: raw,
     request,
     onBeforeGenerateToken: async (p) => {
       // Tolak nama berkas yang menyamar (mis. ".php" atau "../../").
@@ -33,8 +46,8 @@ export async function POST(request: Request) {
         throw new Error('Nama berkas tidak valid.');
       }
       return {
-        allowedContentTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
-        maximumSizeInBytes: maks,
+        allowedContentTypes: aturan.tipe,
+        maximumSizeInBytes: aturan.maks,
         addRandomSuffix: true,
       };
     },
