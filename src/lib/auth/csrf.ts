@@ -1,46 +1,54 @@
 /**
- * Token CSRF.
+ * Token CSRF dengan pola double-submit.
  *
- * Token disimpan di data sesi lalu dimasukkan ke setiap form lewat field
- * tersembunyi. Server Actions Next.js sudah memverifikasi Origin/Host,
- * jadi ini lapisan kedua (defence in depth) sekaligus mempertahankan
- * perilaku yang sama dengan versi PHP.
+ * Middleware (src/middleware.ts) assures cookie `fp_csrf` selalu ada, lalu
+ * nilainya yang sama dimasukkan ke setiap form. Server Actions membandingkan
+ * nilai di form dengan nilai di cookie.
+ *
+ * Cara ini dipilih karena cookie tidak boleh diubah saat render halaman —
+ * sedangkan tamu yang belum login tetap butuh token untuk form masuk/daftar.
+ * Next.js sendiri juga sudah memverifikasi Origin/Host untuk Server Actions,
+ * jadi token ini adalah lapisan kedua.
  */
 import 'server-only';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { getSesi, updateSesi } from './session';
+import { cookies } from 'next/headers';
+import { timingSafeEqual } from 'node:crypto';
+import { flash } from '@/lib/flash';
 
+const COOKIE = 'fp_csrf';
+
+/** Ambil token untuk ditaruh di field form tersembunyi. */
 export async function csrfToken(): Promise<string> {
-  const { data } = await getSesi();
-  if (data.csrf) return data.csrf;
-  const baru = randomBytes(32).toString('hex');
-  await updateSesi((d) => ({ ...d, csrf: baru }));
-  return baru;
+  const store = await cookies();
+  return store.get(COOKIE)?.value ?? '';
 }
 
 /** Bandingkan dua string dengan waktu tetap (timing-safe). */
 function sama(a: string, b: string): boolean {
   const ba = Buffer.from(a);
   const bb = Buffer.from(b);
-  if (ba.length !== bb.length) return false;
+  if (ba.length !== bb.length || ba.length === 0) return false;
   return timingSafeEqual(ba, bb);
 }
 
 /**
- * Periksa token dari form. Melempar error kalau tidak cocok, jadi
- * pemanggil cukup `await verifikasiCsrf(formData)` lalu lanjut.
+ * Periksa token dari form.
+ *
+ * Mengembalikan true bila sah. Kalau tidak, pesan flash disetel supaya
+ * pemanggil cukup `redirect()` — tanpa melempar error 500 ke pengguna.
  */
-export async function verifikasiCsrf(formData: FormData): Promise<void> {
-  const { data } = await getSesi();
-  const kirim = formData.get('_csrf');
-  const disimpan = data.csrf ?? '';
+export async function csrfAman(formData: FormData): Promise<boolean> {
+  const store = await cookies();
+  const tersimpan = store.get(COOKIE)?.value ?? '';
+  const dikirim = formData.get('_csrf');
 
   const sah =
-    typeof kirim === 'string' && kirim.length > 0 && sama(kirim, disimpan);
+    typeof dikirim === 'string' && dikirim.length > 0 && sama(dikirim, tersimpan);
+  if (sah) return true;
 
-  if (!sah) {
-    throw new Error(
-      'Sesi formulir kedaluwarsa. Kembali, muat ulang halaman, lalu coba lagi.',
-    );
-  }
+  await flash(
+    'bad',
+    'Sesi formulir kedaluwarsa. Muat ulang halaman, lalu coba lagi.',
+  );
+  return false;
 }

@@ -87,13 +87,18 @@ async function main() {
   console.log(`${baruKelas.length} baru, total ${totalKelas.length}`);
 
   // ---------- Produk ----------
+  // produk.nama tidak punya constraint UNIQUE di skema, jadi yang kurang
+  // dicari manual lalu ditambahkan (bukan insert semua).
   process.stdout.write('Produk ... ');
-  const produkAda = await db.select({ id: produk.id }).from(produk);
-  if (produkAda.length === 0) {
-    await db.insert(produk).values(PRODUK);
+  const produkAda = new Set(
+    (await db.select({ nama: produk.nama }).from(produk)).map((p) => p.nama),
+  );
+  const kurang = PRODUK.filter((p) => !produkAda.has(p.nama));
+  if (kurang.length) {
+    await db.insert(produk).values(kurang);
   }
   const totalProduk = await db.select({ id: produk.id }).from(produk);
-  console.log(`total ${totalProduk.length}`);
+  console.log(`${kurang.length} ditambahkan, total ${totalProduk.length}`);
 
   // ---------- Pengaturan ----------
   process.stdout.write('Pengaturan ... ');

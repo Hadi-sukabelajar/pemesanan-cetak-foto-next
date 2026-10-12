@@ -2,16 +2,17 @@
  * Sesi pengguna — pengganti $_SESSION PHP.
  *
  * Kenapa tidak pakai session bawaan Next.js?
- * Karena Vercel Functions bisa menjalankan beberapa instance sekaligus dan
- * cookie harus tetap valid lintas instance. Cookie stateless bisa "diisi ulang"
- * (terlihat), jadi cookie ini hanya berisi ID sesi bertanda tangan HMAC;
- * isi sesinya (csrf, flash, login_fail, oauth_state) disimpan di database.
+ * Karena Vercel Functions bisa menjalankan banyak instance sekaligus, dan
+ * cookie harus tetap valid lintas instance. Cookie stateless bisa "diisi
+ * ulang" (terlihat), jadi cookie ini hanya berisi ID sesi bertanda tangan
+ * HMAC; isi sesinya (flash, oauth_state, dll) disimpan di database.
  */
 import 'server-only';
 import { cookies } from 'next/headers';
 import { randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
+import { cache } from 'react';
 import { eq, lt } from 'drizzle-orm';
-import { getDb, type Tx, type Db } from '@/lib/db';
+import { getDb } from '@/lib/db';
 import { sesi, pengguna, type Pengguna, type Peran } from '@/lib/db/schema';
 
 const COOKIE = 'fp_sesi';
@@ -22,9 +23,7 @@ export type JenisFlash = 'ok' | 'bad' | 'warn' | 'info';
 
 /** Data yang disimpan di baris tabel `sesi` (setara $_SESSION PHP). */
 export type DataSesi = {
-  csrf?: string;
   flash?: Array<{ type: JenisFlash; msg: string }>;
-  loginFail?: { n: number; t: number };
   oauthState?: string;
 };
 
@@ -46,17 +45,33 @@ function unsign(token: string): string | null {
   const parts = token.split('.');
   if (parts.length !== 2) return null;
   const [id, mac] = parts;
-  const expected = sign(id);
   const a = Buffer.from(mac);
-  const b = Buffer.from(expected);
+  const b = Buffer.from(sign(id));
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
   return id;
 }
 
-// Cache per-request supaya tidak query berulang dalam satu render.
-let cache: { id: string | null; data: DataSesi; user: Pengguna | null } | null = null;
+function opsiCookie(expires: Date) {
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    expires,
+  };
+}
 
-async function muat(tx: Tx): Promise<{ id: string | null; data: DataSesi; user: Pengguna | null }> {
+type IsiSesi = { id: string | null; data: DataSesi; user: Pengguna | null };
+
+/**
+ * Baca sesi saat ini.
+ *
+ * `cache()` dari React dipakai supaya hasil ini dihitung SEKALI per request
+ * dan TIDAK dibagikan ke request lain. Ini penting: kalau cache-nya berada di
+ * level modul, dua pengguna yang kebetulan requests bersamaan bisa saling
+ * membaca sesi masing-masing.
+ */
+export const getSesi = cache(async (): Promise<IsiSesi> => {
   const store = await cookies();
   const token = store.get(COOKIE)?.value;
   if (!token) return { id: null, data: {}, user: null };
@@ -64,13 +79,8 @@ async function muat(tx: Tx): Promise<{ id: string | null; data: DataSesi; user: 
   const id = unsign(token);
   if (!id) return { id: null, data: {}, user: null };
 
-  const db = tx as unknown as Db;
-  const [baris] = await db
-    .select()
-    .from(sesi)
-    .where(eq(sesi.id, id))
-    .limit(1);
-
+  const db = getDb();
+  const [baris] = await db.select().from(sesi).where(eq(sesi.id, id)).limit(1);
   if (!baris) return { id: null, data: {}, user: null };
   if (new Date(baris.kedaluwarsa).getTime() < Date.now()) {
     await db.delete(sesi).where(eq(sesi.id, id));
@@ -93,38 +103,26 @@ async function muat(tx: Tx): Promise<{ id: string | null; data: DataSesi; user: 
       .limit(1);
     user = u ?? null;
     if (!user) {
-      // Akun dihapus admin — rapikan sesinya.
+      // Akun dihapus admin — rapikan sesinya supaya tidak ada sessions yatim.
       await db.delete(sesi).where(eq(sesi.id, id));
       return { id: null, data: {}, user: null };
     }
   }
 
   return { id, data, user };
-}
-
-function opts(expires: Date) {
-  return {
-    httpOnly: true,
-    sameSite: 'lax' as const,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    expires,
-  };
-}
+});
 
 /** Buat sesi baru (dipakai saat login / daftar). */
 export async function buatSesi(penggunaId?: number): Promise<string> {
-  const db = getDb();
   const id = crypto.randomUUID();
-  await db.insert(sesi).values({
+  await getDb().insert(sesi).values({
     id,
     penggunaId: penggunaId ?? null,
-    data: JSON.stringify({ csrf: randomBytes(32).toString('hex') }),
+    data: JSON.stringify({}),
     kedaluwarsa: new Date(Date.now() + MAKA),
   });
   const store = await cookies();
-  store.set(COOKIE, `${id}.${sign(id)}`, opts(new Date(Date.now() + MAKA)));
-  cache = null;
+  store.set(COOKIE, `${id}.${sign(id)}`, opsiCookie(new Date(Date.now() + MAKA)));
   return id;
 }
 
@@ -134,27 +132,9 @@ export async function hancurkanSesi(): Promise<void> {
   const token = store.get(COOKIE)?.value;
   if (token) {
     const id = unsign(token);
-    if (id) {
-      await getDb().delete(sesi).where(eq(sesi.id, id));
-    }
+    if (id) await getDb().delete(sesi).where(eq(sesi.id, id));
   }
   store.delete(COOKIE);
-  cache = null;
-}
-
-/**
- * Sesi saat ini + pengguna yang login (kalau ada).
- * Satu baris ini menggantikan current_user() + $_SESSION PHP.
- */
-export async function getSesi(): Promise<{
-  id: string | null;
-  data: DataSesi;
-  user: Pengguna | null;
-}> {
-  if (cache) return cache;
-  const db = getDb();
-  cache = await muat(db as unknown as Tx);
-  return cache;
 }
 
 /** Pengguna yang login, atau null. */
@@ -162,24 +142,33 @@ export async function currentUser(): Promise<Pengguna | null> {
   return (await getSesi()).user;
 }
 
-/** Simpan perubahan ke data sesi (csrf, flash, dll). */
+/**
+ * Simpan perubahan ke data sesi (flash, oauth_state, dll).
+ *
+ * Selalu menulis ke database langsung supaya request berikutnya membaca
+ * nilai terbaru.
+ *
+ * Kalau ternyata belum ada sesi sama sekali (mis. tamu yang gagal login),
+ * sesinya dibuat lebih dulu — cookie hanya boleh diubah dari Server Action
+ * atau Route Handler, dan pemanggil `updateSesi()` memang selalu salah
+ * keduanya. Tanpa ini, pesan "password salah" akan hilang sebelum tampil.
+ */
 export async function updateSesi(ubah: (d: DataSesi) => DataSesi): Promise<void> {
   const sekarang = await getSesi();
-  if (!sekarang.id) return;
-  const baru = ubah({ ...sekarang.data });
+  const punyaSesi = sekarang.id !== null;
+  const id = sekarang.id ?? (await buatSesi());
+  const data = punyaSesi ? sekarang.data : {};
+
   await getDb()
     .update(sesi)
-    .set({ data: JSON.stringify(baru) })
-    .where(eq(sesi.id, sekarang.id));
-  cache = { ...sekarang, data: baru };
+    .set({ data: JSON.stringify(ubah({ ...data })) })
+    .where(eq(sesi.id, id));
 }
 
-/** Buang semua sesi kedaluwarsa (panggil berkala dari instrumentation). */
+/** Buang semua sesi kedaluwarsa (dipanggil dari instrumentation). */
 export async function bersihkanSesi(): Promise<void> {
   await getDb().delete(sesi).where(lt(sesi.kedaluwarsa, new Date()));
 }
 
 export { COOKIE as COOKIE_SESI };
-
-// Helper kecil supaya tipe peran enak dipakai di komponen.
 export type { Peran };

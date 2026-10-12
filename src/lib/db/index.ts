@@ -43,6 +43,32 @@ function isLokal(url: string): boolean {
   }
 }
 
+/**
+ * Pool PostgreSQL untuk mode lokal.
+ *
+ * Dua hal penting di sini:
+ *
+ * 1. Pool harus dipakai ulang — membuat `new Pool()` tiap permintaan akan
+ *    membuka koneksi baru terus-menerus sampai PostgreSQL menolak dengan
+ *    "sorry, too many clients already".
+ *
+ * 2. Disimpan di `globalThis`, bukan di variabel modul biasa. Next.js
+ *    membundel setiap route secara terpisah, jadi variabel modul akan
+ *    terduplikasi per bundel dan setiap bundel membuat pool sendiri.
+ *    `globalThis` dipakai bersama oleh seluruh bundel dalam satu proses.
+ */
+const KUNCI_POOL = Symbol.for('foto-pelantikan.db.pool');
+
+type DbGlobal = typeof globalThis & { [KUNCI_POOL]?: Pool };
+
+function ambilPool(url: string): Pool {
+  const g = globalThis as DbGlobal;
+  if (!g[KUNCI_POOL]) {
+    g[KUNCI_POOL] = new Pool({ connectionString: url, max: 10 });
+  }
+  return g[KUNCI_POOL];
+}
+
 export function getDb(): Db {
   const url = process.env.DATABASE_URL;
   if (!url) {
@@ -52,8 +78,7 @@ export function getDb(): Db {
   }
 
   if (isLokal(url)) {
-    const pool = new Pool({ connectionString: url, max: 5 });
-    return drizzlePg(pool, { schema }) as unknown as Db;
+    return drizzlePg(ambilPool(url), { schema }) as unknown as Db;
   }
   return drizzleNeon(neon(url), { schema });
 }

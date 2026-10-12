@@ -7,43 +7,13 @@
 
 const ZONA = 'Asia/Jakarta';
 
-const formatterTanggal = new Intl.DateTimeFormat('id-ID', {
-  timeZone: ZONA,
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-});
-
-const formatterTanggalJam = new Intl.DateTimeFormat('id-ID', {
-  timeZone: ZONA,
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
-/** Rp 180.000 */
-export function rupiah(n: number | string | null | undefined): string {
-  const angka = Number(n ?? 0);
-  return 'Rp ' + (Number.isFinite(angka) ? angka : 0).toLocaleString('id-ID');
-}
-
-/** 12/10/2026 19:45 — atau '-' kalau null. */
-export function tgl(v: Date | string | null | undefined, denganJam = true): string {
-  if (!v) return '-';
-  const d = v instanceof Date ? v : new Date(v);
-  if (Number.isNaN(d.getTime())) return '-';
-  return (denganJam ? formatterTanggalJam : formatterTanggal).format(d);
-}
-
-/** Untuk atribut <input type="datetime-local"> dalam zona Jakarta. */
-export function tglInput(v: Date | string | null | undefined): string {
-  if (!v) return '';
-  const d = v instanceof Date ? v : new Date(v);
-  if (Number.isNaN(d.getTime())) return '';
-  const bagian = new Intl.DateTimeFormat('en-CA', {
+/**
+ * Ambil bagian tanggal/jam dalam zona sekolah sebagai angka.
+ * Sengaja tidak memakai toLocaleString supaya hasilnya persis seperti PHP
+ * (dd/mm/YYYY HH:MM), bukan "12/10/2026, 22.23" gaya en-US.
+ */
+function bagian(d: Date): Record<string, string> {
+  const p = new Intl.DateTimeFormat('en-GB', {
     timeZone: ZONA,
     year: 'numeric',
     month: '2-digit',
@@ -52,8 +22,40 @@ export function tglInput(v: Date | string | null | undefined): string {
     minute: '2-digit',
     hour12: false,
   }).formatToParts(d);
-  const ambil = (t: string) => bagian.find((x) => x.type === t)?.value ?? '';
-  return `${ambil('year')}-${ambil('month')}-${ambil('day')}T${ambil('hour')}:${ambil('minute')}`;
+  const ambil = (t: string) => p.find((x) => x.type === t)?.value ?? '';
+  return {
+    dd: ambil('day'),
+    mm: ambil('month'),
+    yyyy: ambil('year'),
+    hh: ambil('hour'),
+    menit: ambil('minute'),
+  };
+}
+
+/** Rp 180.000 */
+export function rupiah(n: number | string | null | undefined): string {
+  const angka = Number(n ?? 0);
+  return 'Rp ' + (Number.isFinite(angka) ? angka : 0).toLocaleString('id-ID');
+}
+
+/** 12/10/2026 22:03 — atau '-' kalau null. */
+export function tgl(v: Date | string | null | undefined, denganJam = true): string {
+  if (!v) return '-';
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return '-';
+  const b = bagian(d);
+  return denganJam
+    ? `${b.dd}/${b.mm}/${b.yyyy} ${b.hh}:${b.menit}`
+    : `${b.dd}/${b.mm}/${b.yyyy}`;
+}
+
+/** Untuk atribut <input type="datetime-local"> dalam zona Jakarta. */
+export function tglInput(v: Date | string | null | undefined): string {
+  if (!v) return '';
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return '';
+  const b = bagian(d);
+  return `${b.yyyy}-${b.mm}-${b.dd}T${b.hh}:${b.menit}`;
 }
 
 /**

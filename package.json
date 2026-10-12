@@ -27,7 +27,7 @@
     "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@tailwindcss/turbopack": "^4",
+    "@playwright/test": "^1.64.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
@@ -36,7 +36,6 @@
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
-    "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
   }
