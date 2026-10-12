@@ -117,7 +117,22 @@ Di Vercel: **Storage → Create Blob Store**, lalu hubungkan ke project.
 2. Tambahkan Redirect URI: `https://DOMAINMU/api/auth/google/callback`.
 3. Isi `GOOGLE_CLIENT_ID` dan `GOOGLE_CLIENT_SECRET`.
 
-### 5. Deploy
+Kalau kedua env itu kosong, tombol "Masuk dengan Google" otomatis disembunyikan
+— persis seperti versi PHP.
+
+### 5. Instalasi pertama (opsional)
+
+Kalau database sudah diisi lewat `db:seed`, lewati bagian ini.
+
+Untuk database kosong, buka `https://DOMAINMU/setup` dan buat admin pertama.
+Halaman tersebut **mengunci diri sendiri** begitu admin pertama ada, jadi
+tidak perlu dihapus manual dari server seperti `setup.php` di versi PHP.
+
+Bila `SETUP_KEY` diisi di environment, kode itu juga wajib dimasukkan saat
+membuat admin — ini mencegah orang lain membuat admin duluan di server yang
+baru online.
+
+### 6. Deploy
 
 ```bash
 vercel --prod
@@ -137,15 +152,19 @@ Aturan yang dijaga di kode dan diuji otomatis:
   awalan `' ` agar tidak jadi formula di Excel.
 - Session memakai cookie HMAC; isi sesi disimpan di database sehingga tetap
   valid lintas instance serverless.
+- Halaman `/setup` terkunci permanen setelah admin pertama dibuat.
+- Redirect OAuth memakai host dari request (`X-Forwarded-Host`), bukan URL
+  internal Next, supaya redirect URI cocok dengan yang didaftarkan di Google.
 
 ## Struktur penting
 
 ```
 src/app/(admin)/      halaman dashboard, antrian, pesanan, transaksi,
                       riwayat, monitor, upload-foto, arsip, pengguna,
-                      produk, jurusan, pengaturan
+                      produk, jurusan, pengaturan, transaksi/[id]
+src/app/(auth)/       masuk, daftar, setup admin pertama
 src/app/(siswa)/      pesan, pesanan-saya, pembayaran, kuitansi
-src/app/api/          ekspor CSV, bukti/foto (berkas privat), unggah
+src/app/api/          ekspor CSV, bukti/foto (berkas privat), unggah, OAuth Google
 src/lib/auth/         sesi, RBAC, CSRF, rate limit, password
 src/lib/orders.ts     seluruh logika bisnis pesanan
 src/lib/blob.ts       Vercel Blob + validasi magic bytes
