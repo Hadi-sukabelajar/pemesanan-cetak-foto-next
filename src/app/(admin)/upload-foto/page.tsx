@@ -82,7 +82,7 @@ export default async function HalamanUploadFoto({
                 <div>
                   <div className="row">
                     {p.noAntrian ? (
-                      <b className="rb-queue b">{p.noAntrian}</b>
+                      <span className="badge b-accent">Antrian {p.noAntrian}</span>
                     ) : (
                       <span className="muted">tanpa nomor</span>
                     )}

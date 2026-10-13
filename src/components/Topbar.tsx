@@ -91,8 +91,8 @@ export function Topbar({
   const belumMasuk = [
     { href: '/pesan', label: 'Pesan Foto', kunci: 'pesan' },
     { href: '/cek', label: 'Cek Pesanan', kunci: 'cek' },
-    { href: '/masuk', label: 'Masuk' },
-    { href: '/daftar', label: 'Daftar' },
+    { href: '/masuk', label: 'Masuk', kunci: 'masuk' },
+    { href: '/daftar', label: 'Daftar', kunci: 'daftar' },
   ];
 
   return (

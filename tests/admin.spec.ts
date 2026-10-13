@@ -44,6 +44,16 @@ test.describe('Halaman admin', () => {
     await expect(page.getByRole('heading', { name: /Antrian cetak/ })).toBeVisible();
   });
 
+  test('layout admin konsisten di halaman staf selain dashboard', async ({ page }) => {
+    await masuk(page, 'admin1', '123456789');
+    await page.waitForURL(/\/dashboard/, { timeout: 20_000 });
+    await page.goto('/pesanan');
+
+    await expect(page.locator('body.admin-body')).toHaveCount(1);
+    await expect(page.locator('.nav a.on')).toContainText('Pesanan');
+    await expect(page.locator('.nav button.logout')).toBeVisible();
+  });
+
   test('monitor terbuka untuk admin & guru', async ({ page }) => {
     await masuk(page, 'guru1', '123456789');
     await page.waitForURL(/\/monitor/, { timeout: 20_000 });

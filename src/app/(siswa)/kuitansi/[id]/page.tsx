@@ -92,6 +92,9 @@ export default async function HalamanKuitansi({
       </div>
 
       <div className="kuitansi">
+        <p className="print-only">
+          Nomor antrian: {p.noAntrian ?? '—'} · Kode pesanan: {p.kode}
+        </p>
         <div className="k-head">
           <div>
             <span className="eyebrow">Bukti pemesanan</span>

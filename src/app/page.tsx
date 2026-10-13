@@ -28,7 +28,7 @@ export default async function Beranda() {
           Pesan foto kelas dan jurusanmu secara online. Pilih ukuran, bingkai atau blok, bayar, lalu
           dapatkan nomor antrian.
         </p>
-        <div className="row">
+        <div className="row hero-actions">
           {u ? (
             <>
               <Link href={homePath(u)} className="btn gold">

@@ -42,8 +42,7 @@ export default async function HalamanDashboard() {
 
   return (
     <Ruang judul="Dashboard Admin" aktif="dash" lebar>
-      <KepalaHalaman judul="Dashboard">
-        <span className="eyebrow">{namaSekolah(set)}</span>
+      <KepalaHalaman eyebrow={namaSekolah(set)} judul="Dashboard">
         <p className="muted" style={{ margin: 0 }}>{judulAcara(set)}</p>
       </KepalaHalaman>
 
