@@ -1,6 +1,6 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
 import { NextResponse, type NextRequest } from 'next/server';
-import { wajibLogin, wajibFoto } from '@/lib/auth/rbac';
+import { wajibFoto } from '@/lib/auth/rbac';
 import { currentUser } from '@/lib/auth/session';
 import { bolehUnggahBuktiTamu } from '@/lib/tamu';
 import { aturanUnggah } from '@/lib/blob';
@@ -16,12 +16,14 @@ import { aturanUnggah } from '@/lib/blob';
  *  - 'hasil' -> admin/fotografer (foto hasil, maks 15 MB, hanya gambar)
  */
 export async function POST(request: NextRequest) {
-  try {
-    await wajibLogin();
-  } catch {
-    // wajibLogin() melakukan redirect; tapi di route handler kita balas 401.
-    return new NextResponse('Unauthorized', { status: 401 });
-  }
+  // CATATAN: jangan memanggil wajibLogin() di sini.
+  //
+  // Pemesan tanpa akun memang tidak punya akun, dan wajibLogin() melakukan
+  // redirect() yang pada route handler jadi 401 — sehingga bukti transfer
+  // tidak akan pernah bisa diunggah oleh tamu, berapa pun tokennya.
+  // Otorisasi sebenarnya dilakukan per jenis di bawah: foto hasil hanya
+  // untuk admin & fotografer, bukti transfer untuk siswa ATAU tamu yang
+  // memegang token pesanannya sendiri.
 
   const raw = (await request.json()) as HandleUploadBody & {
     jenis?: unknown;
