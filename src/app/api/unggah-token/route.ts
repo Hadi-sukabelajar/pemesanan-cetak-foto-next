@@ -1,5 +1,5 @@
 import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { wajibLogin, wajibFoto } from '@/lib/auth/rbac';
 import { currentUser } from '@/lib/auth/session';
 import { bolehUnggahBuktiTamu } from '@/lib/tamu';
@@ -15,7 +15,7 @@ import { aturanUnggah } from '@/lib/blob';
  *  - 'bukti' -> siswa/admin (bukti transfer, maks 2 MB, boleh PDF)
  *  - 'hasil' -> admin/fotografer (foto hasil, maks 15 MB, hanya gambar)
  */
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     await wajibLogin();
   } catch {
@@ -40,7 +40,8 @@ export async function POST(request: Request) {
     if (aturan.label === 'Bukti transfer') {
       const u = await currentUser();
       if (u && u.peran !== 'user') return new NextResponse('Unauthorized', { status: 401 });
-      if (!u && !(await bolehUnggahBuktiTamu(raw.pesanan_id))) {
+      const dariQuery = request.nextUrl.searchParams.get('pesanan_id');
+      if (!u && !(await bolehUnggahBuktiTamu(dariQuery ?? raw.pesanan_id))) {
         return new NextResponse('Unauthorized', { status: 401 });
       }
     } else {

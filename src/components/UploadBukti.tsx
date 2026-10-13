@@ -7,8 +7,10 @@ import { UnggahLangsung } from './UnggahLangsung';
  * Membungkus UnggahLangsung supaya pemanggil cukup menyebut "bukti".
  */
 export function UploadBukti({
+  pesananId,
   onSelesai,
 }: {
+  pesananId: number;
   onSelesai: (pathname: string) => void;
 }) {
   return (
@@ -17,6 +19,7 @@ export function UploadBukti({
       accept="image/jpeg,image/png,image/webp,application/pdf"
       label="Upload bukti transfer"
       tombol="Unggah bukti"
+      pesananId={pesananId}
       onSelesai={(hasil) => onSelesai(hasil.pathname)}
     />
   );

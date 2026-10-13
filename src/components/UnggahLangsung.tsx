@@ -23,12 +23,21 @@ export function UnggahLangsung({
   accept,
   label,
   tombol,
+  pesananId,
   onSelesai,
 }: {
   folder: 'bukti' | 'hasil';
   accept: string;
   label: string;
   tombol: string;
+  /**
+   * Id pesanan (wajib untuk folder 'bukti').
+   *
+   * Endpoint /api/unggah-token butuh tahu berkas ini untuk pesanan siapa,
+   * supaya pemesan tanpa akun tetap boleh mengunggah bukti ke pesanannya
+   * sendiri tanpa membuka akses ke pesanan lain.
+   */
+  pesananId?: number;
   onSelesai: (hasil: { pathname: string; nama: string }) => void;
 }) {
   const [status, setStatus] = useState<string>('');
@@ -61,7 +70,9 @@ export function UnggahLangsung({
     try {
       const hasil = await upload(`${folder}/${file.name}`, file, {
         access: 'private',
-        handleUploadUrl: '/api/unggah-token',
+        // pesanan_id dikirim lewat query string karena badan request ini
+        // dipakai sendiri oleh pustaka @vercel/blob.
+        handleUploadUrl: `/api/unggah-token?pesanan_id=${pesananId ?? ''}`,
         onUploadProgress: ({ percentage }: { percentage: number }) => {
           setStatus(`Mengunggah... ${Math.round(percentage)}%`);
         },
@@ -71,7 +82,11 @@ export function UnggahLangsung({
       const cek = await fetch('/api/unggah-simpan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pathname: hasil.pathname, jenis: folder }),
+        body: JSON.stringify({
+          pathname: hasil.pathname,
+          jenis: folder,
+          pesanan_id: pesananId ?? null,
+        }),
       });
       const data = await cek.json();
       if (!cek.ok || !data.ok) {

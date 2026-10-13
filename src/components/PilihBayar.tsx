@@ -77,7 +77,7 @@ export function PilihBayar({
             <b>Nominal: {rupiah(total)}</b>
           </div>
 
-          <UploadBukti onSelesai={(pathname) => setPathnameBukti(pathname)} />
+          <UploadBukti pesananId={pesananId} onSelesai={(pathname) => setPathnameBukti(pathname)} />
 
           <div className="hint">
             JPG / PNG / WEBP / PDF, maksimal 2 MB.
