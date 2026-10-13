@@ -1,5 +1,6 @@
-import { neon } from '@neondatabase/serverless';
-import { drizzle as drizzleNeon, type NeonHttpDatabase } from 'drizzle-orm/neon-http';
+import { Pool as NeonPool, neon } from '@neondatabase/serverless';
+import { drizzle as drizzleNeonHttp, type NeonHttpDatabase } from 'drizzle-orm/neon-http';
+import { drizzle as drizzleNeonWs } from 'drizzle-orm/neon-serverless';
 import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
@@ -23,9 +24,9 @@ export type Db = NeonHttpDatabase<typeof schema>;
  *
  * Kenapa dua driver?
  *
- *  - Produksi (Neon / Vercel) memakai driver HTTP serverless dari Neon.
- *    Lewat HTTPS biasa, jadi tidak menahan koneksi TCP antar request —
- *    aman untuk model serverless yang bisa diskalakan jadi banyak instance.
+ *  - Produksi (Neon / Vercel) memakai driver WebSocket serverless dari Neon.
+ *    Dipakai WebSocket (bukan HTTP) karena driver HTTP-nya tidak mendukung
+ *    transaksi, sedangkan logika pesanan membutuhkannya.
  *
  *  - Pengembangan lokal memakai node-postgres (pg), karena driver HTTP-nya
  *    hanya bisa bicara ke proxy Neon, bukan ke PostgreSQL biasa di localhost.
@@ -80,7 +81,36 @@ export function getDb(): Db {
   if (isLokal(url)) {
     return drizzlePg(ambilPool(url), { schema }) as unknown as Db;
   }
-  return drizzleNeon(neon(url), { schema });
+
+  // Neon WAJIB lewat driver WebSocket (neon-serverless), bukan neon-http.
+  //
+  // Alasannya: neon-http adalah driver HTTP stateless dan TIDAK mendukung
+  // transaksi — memanggil db.transaction() langsung melempar
+  // "No transactions support in neon-http driver". Setiap pembuatan pesanan
+  // memakai transaksi (nomor antrian issued dengan FOR UPDATE supaya tidak
+  // pernah bentrok), jadi memakai neon-http berarti pemesanan selalu gagal
+  // di produksi.
+  //
+  // Driver WebSocket butuh paket `ws` untuk membuat koneksi di Node.
+  return drizzleNeonWs(ambilNeonPool(url), { schema }) as unknown as Db;
+}
+
+/**
+ * Pool Neon via WebSocket.
+ *
+ * Sama seperti pool lokal, disimpan di `globalThis` supaya tidak membuat
+ * koneksi baru setiap kali modul ini di-bundle ulang oleh Next.js.
+ */
+const KUNCI_NEON = Symbol.for('foto-pelantikan.db.neon');
+
+type NeonGlobal = typeof globalThis & { [KUNCI_NEON]?: NeonPool };
+
+function ambilNeonPool(url: string): NeonPool {
+  const g = globalThis as NeonGlobal;
+  if (!g[KUNCI_NEON]) {
+    g[KUNCI_NEON] = new NeonPool({ connectionString: url, max: 10 });
+  }
+  return g[KUNCI_NEON];
 }
 
 /** Tipe handle transaksi yang dipakai modul bisnis. */

@@ -8,8 +8,10 @@
  *  - Item produk yang dinonaktifkan tidak hilang diam-diam.
  */
 import 'server-only';
+import { randomBytes } from 'node:crypto';
 import { and, asc, eq, inArray, max, sql } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
+import { teleponSah } from '@/lib/telepon';
 import {
   pengaturan,
   pesanan,
@@ -183,6 +185,8 @@ export type HasilValidasi =
 
 export type DataPesanan = {
   nama: string;
+  /** Nomor HP ternormalisasi (08xx). Wajib untuk semua pemesan. */
+  telepon: string;
   kelasId: number;
   catatan: string | null;
   qty: Map<number, number>;
@@ -208,6 +212,13 @@ export async function validasiPesanan(
 
   if (nama === '' || Array.from(nama).length > 100) {
     errors.push('Nama wajib diisi (maks. 100 karakter).');
+  }
+
+  // Nomor HP wajib untuk semua orang, termasuk pemesan tanpa login:
+  // inilah kunci yang dipakai pemesan untuk kembali ke pesanannya lewat /cek.
+  const telepon = teleponSah(String(formData.get('telepon') ?? ''));
+  if (!telepon) {
+    errors.push('Nomor HP wajib diisi dengan format 08xx (mis. 081234567890).');
   }
   const kelasAda = await db
     .select({ id: kelas.id })
@@ -260,11 +271,25 @@ export async function validasiPesanan(
     ok: true,
     data: {
       nama,
+      // TypeScript tidak tahu `telepon` pasti non-null di sini, tapi
+      ///errors di atas sudah menolak kalau normalisasi gagal.
+      telepon: telepon!,
       kelasId,
       catatan: catatan === '' ? null : catatan,
       qty,
     },
   };
+}
+
+/**
+ * Token akses pesanan: 16 byte acak -> 32 karakter heksadesimal (128 bit).
+ *
+ * Ini setara bearer credential: siapa pun yang memilikinya bisa membuka
+ * kuitansi, bukti transfer, dan foto hasil pesanan tersebut — jadi harus
+ * dianggap rahasia, tidak boleh dicetak di halaman yang publik.
+ */
+export function tokenPesanan(): string {
+  return randomBytes(16).toString('hex');
 }
 
 /** Buat kode pesanan unik; 3 byte acak + percobaan ulang. */
@@ -307,6 +332,12 @@ export async function simpanPesanan(
   data: DataPesanan,
   penggunaId: number | null,
   idAda: number | null,
+  /**
+   * Dipanggil dengan token yang baru terbit saat pesanan BARU dibuat.
+   * Pemanggil butuh token-nya untuk mengarahkan pemesan ke kuitansi lewat
+   * /api/pesanan/<id>/ambil (cookie sesi hanya boleh ditulis di situ).
+   */
+  simpanToken?: (token: string) => void,
 ): Promise<number> {
   const db = getDb();
 
@@ -339,12 +370,19 @@ export async function simpanPesanan(
       const noAntrian = await nomorAntrianBerikutnya(tx);
       const dipakai = new Set<string>();
       const kode = await kodeUnik(tx, dipakai);
+      const tokenBaru = tokenPesanan();
+      simpanToken?.(tokenBaru);
       const [baru] = await tx
         .insert(pesanan)
         .values({
           kode,
           penggunaId,
           nama: data.nama,
+          telepon: data.telepon,
+          // Token terbit untuk SETIAP pesanan baru, bukan hanya pesanan tamu.
+          // Pemilik yang punya akun juga bisa memakainya untuk tautan kuitansi
+          // yang bisa dibagikan (mis. ke bendahara sekolah).
+          token: tokenBaru,
           kelasId: data.kelasId,
           kelasNama: namaKelas,
           catatan: data.catatan,
@@ -392,7 +430,15 @@ export async function simpanPesanan(
     }
     await tx
       .update(pesanan)
-      .set({ nama: data.nama, kelasId: data.kelasId, kelasNama: namaKelas, catatan: data.catatan })
+      .set({
+        nama: data.nama,
+        // Nomor HP boleh dikoreksi admin kapan saja: tidak ada data lain
+        // yang bergantung pada nomor ini.
+        telepon: data.telepon,
+        kelasId: data.kelasId,
+        kelasNama: namaKelas,
+        catatan: data.catatan,
+      })
       .where(eq(pesanan.id, idAda));
     return idAda;
   });

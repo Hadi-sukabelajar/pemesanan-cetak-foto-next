@@ -105,6 +105,7 @@ test.describe('Pengelolaan data admin', () => {
       { timeout: 25_000 },
     );
     await page.fill('#nama', 'Pakai Kelas Uji');
+    await page.fill('#telepon', '081234567890');
     await page.selectOption('#jurusan_id', { label: jurusanBaru });
     await page.selectOption('#kelas_id', { label: kelas });
     await page.getByRole('button', { name: /Tambah Cetak Foto A4/ }).click();

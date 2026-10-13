@@ -18,10 +18,24 @@ type Produk = {
  * harga yang dipakai server saat menyimpan selalu diambil ulang dari
  * database — jadi manipulasi di browser tidak berpengaruh apa pun.
  */
-export function BarisProduk({ produk }: { produk: Produk[] }) {
-  const [jumlah, setJumlah] = useState<Record<number, number>>(() =>
-    Object.fromEntries(produk.map((p) => [p.id, 0])),
-  );
+export function BarisProduk({
+  produk,
+  qtyAwal = {},
+}: {
+  produk: Produk[];
+  /**
+   * Jumlah yang sudah terisi pada pesanan lama, dipakai saat MENGEDIT.
+   *
+   * Tanpa ini, form edit selalu mulai dari nol — sehingga siapa pun yang
+   * mengedipesan tanpa menyentuh tombolnya akan menghapus seluruh itemnya.
+   */
+  qtyAwal?: Record<number, number>;
+}) {
+  const [jumlah, setJumlah] = useState<Record<number, number>>(() => {
+    const awal: Record<number, number> = {};
+    for (const p of produk) awal[p.id] = qtyAwal[p.id] ?? 0;
+    return awal;
+  });
 
   const total = useMemo(
     () => produk.reduce((s, p) => s + (jumlah[p.id] ?? 0) * p.harga, 0),

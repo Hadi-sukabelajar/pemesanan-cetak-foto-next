@@ -126,6 +126,7 @@ test.describe('Halaman admin', () => {
       { timeout: 25_000 },
     );
     await page.fill('#nama', 'Pesanan Offline Uji');
+    await page.fill('#telepon', '081234567890');
     await page.selectOption('#jurusan_id', { index: 1 });
     await page.selectOption('#kelas_id', { index: 1 });
     await page.getByRole('button', { name: /Tambah Cetak Foto A4/ }).click();
@@ -150,6 +151,7 @@ test.describe('Halaman admin', () => {
       { timeout: 25_000 },
     );
     await page.fill('#nama', 'Belum Bayar Uji');
+    await page.fill('#telepon', '081234567890');
     await page.selectOption('#jurusan_id', { index: 1 });
     await page.selectOption('#kelas_id', { index: 1 });
     await page.getByRole('button', { name: /Tambah Cetak Foto A4/ }).click();
@@ -173,6 +175,7 @@ test.describe('Halaman admin', () => {
       { timeout: 25_000 },
     );
     await page.fill('#nama', penanda);
+    await page.fill('#telepon', '081234567890');
     await page.selectOption('#jurusan_id', { index: 1 });
     await page.selectOption('#kelas_id', { index: 1 });
     await page.getByRole('button', { name: /Tambah Cetak Foto A4/ }).click();

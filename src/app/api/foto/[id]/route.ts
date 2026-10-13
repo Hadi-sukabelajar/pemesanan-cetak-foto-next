@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { pesanan } from '@/lib/db/schema';
-import { wajibLogin, bolehBukaPesanan } from '@/lib/auth/rbac';
+import { bolehBukaPesanan } from '@/lib/auth/rbac';
+import { currentUser } from '@/lib/auth/session';
+import { tokenTersimpan } from '@/lib/tamu';
 import { alirkanBlob } from '@/lib/blob';
 
 /**
@@ -15,13 +17,14 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const u = await wajibLogin();
   const { id } = await params;
   const idNum = Number(id) || 0;
+  const u = await currentUser();
 
   const [p] = await getDb().select().from(pesanan).where(eq(pesanan.id, idNum)).limit(1);
 
-  if (!p || !bolehBukaPesanan(u, p.penggunaId) || !p.fotoHasil) {
+  const token = await tokenTersimpan(idNum);
+  if (!p || !bolehBukaPesanan(u, p, token) || !p.fotoHasil) {
     return new NextResponse('Foto tidak ditemukan.', { status: 404 });
   }
 

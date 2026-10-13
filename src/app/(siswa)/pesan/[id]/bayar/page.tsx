@@ -3,7 +3,10 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import { Ruang } from '@/components/Ruang';
-import { wajibSiswa } from '@/lib/auth/rbac';
+import { homePath } from '@/lib/auth/rbac';
+import { currentUser } from '@/lib/auth/session';
+import { tokenTersimpan } from '@/lib/tamu';
+import { pesananMilikTamu } from '@/lib/pesanan-akses';
 import { csrfToken } from '@/lib/auth/csrf';
 import { FormCsrf } from '@/components/FormCsrf';
 import { PilihBayar } from '@/components/PilihBayar';
@@ -29,26 +32,27 @@ export default async function HalamanBayar({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const u = await wajibSiswa();
+  // Tamu pun boleh membayar pesanannya sendiri selama memegang tokennya.
+  const u = await currentUser();
+  if (u && u.peran !== 'user') redirect(homePath(u));
   const { id } = await params;
   const idNum = Number(id) || 0;
+  const kembali = u ? '/pesanan-saya' : '/cek';
 
   const [token, set] = await Promise.all([csrfToken(), pengaturanMap()]);
 
-  const [p] = await getDb()
-    .select()
-    .from(pesanan)
-    .where(eq(pesanan.id, idNum))
-    .limit(1);
+  const p = u
+    ? ((await getDb().select().from(pesanan).where(eq(pesanan.id, idNum)).limit(1))[0] ?? null)
+    : await pesananMilikTamu(idNum, await tokenTersimpan(idNum));
 
-  if (!p || p.penggunaId !== u.id) {
-    await flash('bad', 'Pesanan tidak ditemukan.');
-    redirect('/pesanan-saya');
+  const milikSendiri = p && (u ? p.penggunaId === u.id : true);
+  if (!p || !milikSendiri) {
+    // Cookie tidak boleh ditulis saat render; tandai lewat query string.
+    redirect(`${kembali}?salah=pesanan`);
   }
   if (p.statusBayar === 'sudah') redirect(`/kuitansi/${idNum}`);
   if (p.status === 'dibatalkan') {
-    await flash('warn', 'Pesanan ini sudah dibatalkan.');
-    redirect('/pesanan-saya');
+    redirect(`${kembali}?salah=batal`);
   }
 
   const items = await itemPesanan(p.id);

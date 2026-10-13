@@ -79,21 +79,12 @@ export function isStaf(u: Pengguna | null): boolean {
  *  - admin & guru : semua pesanan (untuk kuitansi & monitor, read-only)
  *  - selain itu   : hanya pesanan miliknya sendiri
  */
-export function bolehBukaPesanan(
-  u: Pengguna,
-  pesananPenggunaId: number | null,
-): boolean {
-  if (u.peran === 'admin' || u.peran === 'guru') return true;
-  return pesananPenggunaId !== null && pesananPenggunaId === u.id;
-}
-
 /**
- * Bukti transfer lebih sensitif (berisi nomor rekening & nama pemesan),
- * jadi HANYA pemilik pesanan dan admin — bukan guru.
+ * Boleh buka pesanan / bukti transfer.
+ *
+ * Logikanya pindah ke lib/izin-pesanan.ts supaya bisa dipakai juga oleh
+ * route yang tidak punya pengguna (pemesan tanpa login).
  */
-export function bolehBukaBukti(u: Pengguna, pesananPenggunaId: number | null): boolean {
-  if (u.peran === 'admin') return true;
-  return pesananPenggunaId !== null && pesananPenggunaId === u.id;
-}
+export { bolehBukaPesanan, bolehBukaBukti } from '@/lib/izin-pesanan';
 
 export type { Peran };

@@ -5,6 +5,33 @@
 set -u
 cd "$(dirname "$0")"
 
+# --- Pengaman: jangan pernah menguji database produksi ---------------------
+# Suite ini sengaja merusak data: membuat akun, pesanan, dan mengubah
+# Pengaturan. Kalau .env.local menunjuk ke database produksi, seluruh data itu
+# akan ditulis ke sana. Karena itu skrip berhenti di sini.
+HOST_DB=$(node -e "
+const fs=require('fs');
+let url='';
+try{ url=process.env.DATABASE_URL||'' }catch(e){}
+if(!url){ try{ process.loadEnvFile('.env.local'); url=process.env.DATABASE_URL||'' }catch(e){} }
+try{ console.log(new URL(url).hostname) }catch(e){ console.log('') }
+" 2>/dev/null)
+
+case "$HOST_DB" in
+  ""|localhost|127.0.0.1|::1) : ;;
+  *)
+    if [ "${IZIN_HANCUR_DATABASE:-0}" != "1" ]; then
+      echo "✘ DITOLAK: .env.local menunjuk ke database non-lokal ($HOST_DB)."
+      echo "  Suite pengujian sengaja merusak data (buat akun, pesanan, ubah"
+      echo "  pengaturan), jadi tidak boleh jalan terhadap database produksi."
+      echo
+      echo "  Ubah DATABASE_URL di .env.local ke PostgreSQL lokal, atau set"
+      echo "  IZIN_HANCUR_DATABASE=1 kalau memang benar-benar disengaja."
+      exit 1
+    fi
+    ;;
+esac
+
 stop() { pkill -9 -f "next-server" 2>/dev/null; pkill -9 -f "next start" 2>/dev/null; sleep 1; }
 stop
 

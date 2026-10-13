@@ -87,9 +87,13 @@ export const pesanan = pgTable(
   {
     id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
     kode: text('kode').notNull().unique(),
-    // NULL = pesanan offline yang diinput admin
+    // NULL = pesanan tamu (tanpa login) atau pesanan offline yang diinput admin
     penggunaId: integer('pengguna_id').references(() => pengguna.id, { onDelete: 'set null' }),
     nama: text('nama').notNull(),
+    // Nomor HP pemesan, sudah dinormalisasi ke format 08xx.
+    // Wajib untuk semua orang (termasuk tamu) karena dipakai untuk kembali
+    // ke pesanannya lewat halaman /cek.
+    telepon: text('telepon'),
     kelasId: integer('kelas_id').references(() => kelas.id, { onDelete: 'set null' }),
     // Disalin dari kelas saat pesanan dibuat, supaya tetap terbaca walau kelas dihapus
     kelasNama: text('kelas_nama'),
@@ -107,6 +111,11 @@ export const pesanan = pgTable(
     namaFile: text('nama_file'),
     // pathname di Vercel Blob
     fotoHasil: text('foto_hasil'),
+    // Kunci akses (bearer secret) untuk membuka kuitansi, bukti, dan foto
+    // hasil tanpa login. Dibuat untuk SETIAP pesanan baru: 32 karakter hex
+    // (128 bit) sehingga mustahil ditebak, tapi tetap perlu dijaga —
+    // siapa pun yang memegangnya bisa membuka isi pesanan tersebut.
+    token: text('token').unique(),
     dibayarPada: timestamp('dibayar_pada', { withTimezone: true }),
     dibuatPada: timestamp('dibuat_pada', { withTimezone: true }).notNull().defaultNow(),
     diperbaruiPada: timestamp('diperbarui_pada', { withTimezone: true })

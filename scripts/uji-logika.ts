@@ -3,6 +3,11 @@
  * Jalankan: npx tsx scripts/uji-logika.ts
  *
  * Fokus: aturan yang pernah jadi bug di versi PHP.
+ *
+ * ⚠️ SKRIP INI MERUSAK DATABASE: ia membuat pesanan, menonaktifkan produk,
+ * lalu menghapusnya lagi untuk menguji nomor antrian. JANGAN pernah menjalankannya
+ * terhadap database produksi. Karena itu ada pengaman di bawah — kalau
+ * DATABASE_URL bukan localhost, skrip berhenti sebelum menyentuh data.
  */
 import { eq, and } from 'drizzle-orm';
 import { getDb } from '../src/lib/db';
@@ -16,6 +21,43 @@ import {
   nomorAntrianBerikutnya,
   KUNCI_ANTRIAN,
 } from '../src/lib/orders';
+
+/**
+ * Pengaman: refuse to run against anything but a local database.
+ *
+ * Skrip ini menghapus dan mengubah baris (produk dinonaktifkan lalu
+ * dihapus, pesanan ikut terhapus). Menjalankannya terhadap database
+ * produksi akan merusak data asli tanpa bisa dikembalikan.
+ */
+function pastikanLokal(): string {
+  const url = process.env.DATABASE_URL ?? '';
+  let host = '';
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    console.error('DATABASE_URL tidak valid. Isi dulu di .env.local.');
+    process.exit(1);
+  }
+
+  const lokal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  if (!lokal && process.env.IZIN_HANCUR_DATABASE !== '1') {
+    console.error(
+      [
+        '',
+        'DITOLAK: skrip ini merusak data, tapi DATABASE_URL mengarah ke',
+        `  host non-lokal: ${host}`,
+        '',
+        'Jalankan hanya terhadap database pengembangan lokal, atau set',
+        'IZIN_HANCUR_DATABASE=1 kalau memang benar-benar disengaja.',
+        '',
+      ].join('\n'),
+    );
+    process.exit(1);
+  }
+  return url;
+}
+
+pastikanLokal();
 
 let lulus = 0;
 let gagal = 0;
@@ -60,7 +102,7 @@ async function main() {
 
   console.log('\n== 1. Harga dihitung di server (tidak dari browser) ==');
   const idA = await simpanPesanan(
-    { nama: 'Budi', kelasId, catatan: null, qty: new Map([[p1, 2], [p2, 1]]) },
+    { nama: 'Budi', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 2], [p2, 1]]) },
     null,
     null,
   );
@@ -72,7 +114,7 @@ async function main() {
 
   console.log('\n== 2. Nomor antrian naik & tidak pernah dipakai ulang ==');
   const idB = await simpanPesanan(
-    { nama: 'Siti', kelasId, catatan: null, qty: new Map([[p1, 1]]) },
+    { nama: 'Siti', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 1]]) },
     null,
     null,
   );
@@ -82,7 +124,7 @@ async function main() {
   // Hapus pesanan bernomor tertinggi
   await db.delete(pesanan).where(eq(pesanan.id, idB));
   const idC = await simpanPesanan(
-    { nama: 'Andi', kelasId, catatan: null, qty: new Map([[p1, 1]]) },
+    { nama: 'Andi', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 1]]) },
     null,
     null,
   );
@@ -91,8 +133,8 @@ async function main() {
 
   console.log('\n== 3. Dua insert bersamaan -> nomor berbeda ==');
   const [d1, d2] = await Promise.all([
-    simpanPesanan({ nama: 'R1', kelasId, catatan: null, qty: new Map([[p1, 1]]) }, null, null),
-    simpanPesanan({ nama: 'R2', kelasId, catatan: null, qty: new Map([[p1, 1]]) }, null, null),
+    simpanPesanan({ nama: 'R1', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 1]]) }, null, null),
+    simpanPesanan({ nama: 'R2', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 1]]) }, null, null),
   ]);
   const baris = await db
     .select({ no: pesanan.noAntrian })
@@ -105,14 +147,14 @@ async function main() {
 
   console.log('\n== 4. Isi terkunci setelah lunas ==');
   const sebelumLunas = await simpanPesanan(
-    { nama: 'Dewi', kelasId, catatan: null, qty: new Map([[p1, 1]]) },
+    { nama: 'Dewi', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 1]]) },
     null,
     null,
   );
   await konfirmasiBayar(sebelumLunas, 'cash');
   // Coba tambah qty
   await simpanPesanan(
-    { nama: 'Dewi Ganti', kelasId, catatan: 'catatan baru', qty: new Map([[p1, 5], [p2, 3]]) },
+    { nama: 'Dewi Ganti', kelasId, telepon: '081234567890', catatan: 'catatan baru', qty: new Map([[p1, 5], [p2, 3]]) },
     null,
     sebelumLunas,
   );
@@ -125,7 +167,7 @@ async function main() {
 
   console.log('\n== 5. Pesanan dibatalkan tidak bisa dibayar ==');
   const idBatal = await simpanPesanan(
-    { nama: 'Batal', kelasId, catatan: null, qty: new Map([[p1, 1]]) },
+    { nama: 'Batal', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 1]]) },
     null,
     null,
   );
@@ -143,7 +185,7 @@ async function main() {
 
   console.log('\n== 7. Belum lunas tidak bisa jadi "Selesai" ==');
   const idBelum = await simpanPesanan(
-    { nama: 'Belum', kelasId, catatan: null, qty: new Map([[p1, 1]]) },
+    { nama: 'Belum', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 1]]) },
     null,
     null,
   );
@@ -154,7 +196,7 @@ async function main() {
 
   console.log('\n== 8. Tolak bukti pada pesanan lunas ditolak ==');
   const idTerbayar = await simpanPesanan(
-    { nama: 'Lunas', kelasId, catatan: null, qty: new Map([[p1, 1]]) },
+    { nama: 'Lunas', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 1]]) },
     null,
     null,
   );
@@ -170,7 +212,7 @@ async function main() {
 
   console.log('\n== 9. Tolak bukti pada pesanan menunggu bekerja ==');
   const idMenunggu = await simpanPesanan(
-    { nama: 'Menunggu', kelasId, catatan: null, qty: new Map([[p1, 1]]) },
+    { nama: 'Menunggu', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 1]]) },
     null,
     null,
   );
@@ -188,7 +230,7 @@ async function main() {
   console.log('\n== 10. Produk nonaktif tidak hilang saat edit ==');
   await db.update(produk).set({ aktif: false }).where(eq(produk.id, p2));
   const idEdit = await simpanPesanan(
-    { nama: 'Edit Test', kelasId, catatan: null, qty: new Map([[p1, 1]]) },
+    { nama: 'Edit Test', kelasId, telepon: '081234567890', catatan: null, qty: new Map([[p1, 1]]) },
     null,
     null,
   );
@@ -202,6 +244,7 @@ async function main() {
   await db.update(pesanan).set({ total: 130000 }).where(eq(pesanan.id, idEdit));
   // Edit formulir — produk nonaktif tidak punya input, jadi tidak terkirim.
   const formEdit = new FormData();
+  formEdit.set('telepon', '081234567890');
   formEdit.set('nama', 'Edit Test');
   formEdit.set('kelas_id', String(kelasId));
   formEdit.set('catatan', '');

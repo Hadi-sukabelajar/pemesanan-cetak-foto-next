@@ -3,7 +3,9 @@ import Link from 'next/link';
 import { eq } from 'drizzle-orm';
 import { redirect } from 'next/navigation';
 import { Ruang } from '@/components/Ruang';
-import { wajibLogin, bolehBukaPesanan } from '@/lib/auth/rbac';
+import { bolehBukaPesanan } from '@/lib/auth/rbac';
+import { currentUser } from '@/lib/auth/session';
+import { tokenTersimpan } from '@/lib/tamu';
 import { pengaturanMap, namaSekolah, judulAcara } from '@/lib/settings';
 import { itemPesanan, STATUS_PESANAN_LABEL, METODE_LABEL } from '@/lib/orders';
 import { getDb } from '@/lib/db';
@@ -27,17 +29,20 @@ export default async function HalamanKuitansi({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const u = await wajibLogin();
-  const idNum = Number(id) || 0;
+  // Tidak wajib login: pemesan tanpa akun memakai token pesanannya.
+  const [u, idNum] = await Promise.all([currentUser(), Promise.resolve(Number(id) || 0)]);
 
-  const [p, set] = await Promise.all([
+  const [p, set, token] = await Promise.all([
     getDb().select().from(pesanan).where(eq(pesanan.id, idNum)).limit(1).then((r) => r[0] ?? null),
     pengaturanMap(),
+    tokenTersimpan(idNum),
   ]);
 
-  if (!p || !bolehBukaPesanan(u, p.penggunaId)) {
-    await flash('bad', 'Kuitansi tidak ditemukan.');
-    redirect('/');
+  if (!p || !bolehBukaPesanan(u, p, token)) {
+    // Tidak bisa menulis flash di sini: cookie hanya boleh diubah di Server
+    // Action atau Route Handler, bukan saat render halaman. Karena itu
+    // pesannya cukup ditandai lewat query string dan ditampilkan di /cek.
+    redirect('/cek?salah=kuitansi');
   }
 
   const items = await itemPesanan(p.id);
@@ -55,7 +60,9 @@ export default async function HalamanKuitansi({
         ? ['MENUNGGU VERIFIKASI', 'info']
         : ['BELUM LUNAS', 'warn'];
 
-  const bisaBayar = !lunas && !dibatalkan && u.peran === 'user';
+  // Tamu (tanpa akun) juga boleh membayar pesanannya sendiri.
+  const peran = u?.peran ?? 'tamu';
+  const bisaBayar = !lunas && !dibatalkan && (peran === 'user' || peran === 'tamu');
 
   return (
     <Ruang judul="Kuitansi" aktif="riwayat">
@@ -170,11 +177,11 @@ export default async function HalamanKuitansi({
         className="row end mt noprint"
         style={{ maxWidth: 560, marginLeft: 'auto', marginRight: 'auto' }}
       >
-        <a className="btn ghost" href={u.peran === 'user' ? '/pesanan-saya' : '/'}>
-          {u.peran === 'user' ? 'Pesanan saya' : 'Kembali'}
+        <a className="btn ghost" href={peran === 'user' ? '/pesanan-saya' : peran === 'tamu' ? '/cek' : '/'}>
+          {peran === 'user' ? 'Pesanan saya' : peran === 'tamu' ? 'Cek pesanan lain' : 'Kembali'}
         </a>
         <TombolCetak />
-        {u.peran === 'admin' && (
+        {peran === 'admin' && (
           <Link className="btn gold" href="/transaksi">
             + Transaksi baru
           </Link>

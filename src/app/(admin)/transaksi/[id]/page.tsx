@@ -151,6 +151,18 @@ export default async function HalamanTransaksi({
           maxLength={100}
         />
 
+        <label htmlFor="telepon">Nomor HP / WhatsApp pemesan</label>
+        <input
+          type="tel"
+          id="telepon"
+          name="telepon"
+          defaultValue={edit?.telepon ?? ''}
+          required
+          maxLength={20}
+          inputMode="tel"
+          placeholder="08xxxxxxxxxx"
+        />
+
         <PilihJurusanKelas
           jurusan={jurusan}
           kelas={kelas}

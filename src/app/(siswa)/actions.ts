@@ -4,16 +4,21 @@ import { redirect } from 'next/navigation';
 import { eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { pesanan } from '@/lib/db/schema';
-import { wajibSiswa } from '@/lib/auth/rbac';
+import { wajibSiswa, homePath } from '@/lib/auth/rbac';
+import { currentUser } from '@/lib/auth/session';
+import { tokenTersimpan, simpanIzinTamu } from '@/lib/tamu';
 import { csrfAman } from '@/lib/auth/csrf';
 import { flash } from '@/lib/flash';
 import { teks } from '@/lib/input';
 import { validasiPesanan, simpanPesanan } from '@/lib/orders';
-import { pesananMilik } from '@/lib/pesanan-akses';
+import { pesananMilik, pesananMilikTamu } from '@/lib/pesanan-akses';
 
 /** Buat pesanan baru. */
 export async function aksiSimpanPesanan(formData: FormData): Promise<void> {
-  const u = await wajibSiswa();
+  // Boleh tanpa login — pemesan tamu dibuatkan pesanan dengan penggunaId null.
+  // Yang tidak boleh: admin/guru/fotografer memesan lewat form ini.
+  const u = await currentUser();
+  if (u && u.peran !== 'user') redirect(homePath(u));
   if (!(await csrfAman(formData))) redirect('/pesan');
 
   const idEdit = Number(teks(formData.get('id'))) || 0;
@@ -21,11 +26,16 @@ export async function aksiSimpanPesanan(formData: FormData): Promise<void> {
   // Kalau ini pengeditan, pastikan pesanan memang milik orang ini DAN
   // masih boleh diubah: sudah lunas, sudah dikirim buktinya, atau
   // dibatalkan tidak boleh disentuh isinya.
+  //
+  // Tamu boleh mengedit pesanannya sendiri selama masih memegang tokennya,
+  // tapi TIDAK boleh mengedit lewat ?id= milik orang lain.
   if (idEdit) {
-    const lama = await pesananMilik(u, idEdit);
+    const lama = u
+      ? await pesananMilik(u, idEdit)
+      : await pesananMilikTamu(idEdit, await tokenTersimpan(idEdit));
     if (!lama) {
       await flash('bad', 'Pesanan tidak ditemukan.');
-      redirect('/pesanan-saya');
+      redirect(u ? '/pesanan-saya' : '/cek');
     }
     if (
       lama.statusBayar === 'sudah' ||
@@ -33,7 +43,7 @@ export async function aksiSimpanPesanan(formData: FormData): Promise<void> {
       lama.status === 'dibatalkan'
     ) {
       await flash('warn', 'Pesanan ini tidak bisa diubah lagi.');
-      redirect('/pesanan-saya');
+      redirect(u ? '/pesanan-saya' : '/cek');
     }
   }
 
@@ -44,29 +54,47 @@ export async function aksiSimpanPesanan(formData: FormData): Promise<void> {
   }
 
   let baru: number;
+  let token: string | null = null;
   try {
-    baru = await simpanPesanan(hasil.data, u.id, idEdit || null);
+    baru = await simpanPesanan(hasil.data, u?.id ?? null, idEdit || null, (t) => {
+      token = t;
+    });
   } catch (e) {
     await flash('bad', `Pesanan gagal disimpan: ${e instanceof Error ? e.message : 'galat tidak diketahui'}`);
-    redirect('/pesanan-saya');
+    redirect(u ? '/pesanan-saya' : '/cek');
   }
 
   await flash(
     'ok',
     idEdit
       ? 'Pesanan diperbarui.'
-      : 'Pesanan tersimpan & nomor antrian sudah terbit. Klik "Bayar sekarang" untuk melanjutkan pembayaran.',
+      : u
+        ? 'Pesanan tersimpan & nomor antrian sudah terbit. Klik "Bayar sekarang" untuk melanjutkan pembayaran.'
+        : 'Pesanan tersimpan. Catat KODE PESANAN dan nomor HP-mu untuk membuka kuitansi lagi lewat menu Cek Pesanan.',
   );
+
+  // Simpan token ke sesi lalu buka kuitansi lewat URL bersih.
+  //
+  // Ini dilakukan langsung di Server Action — di sinilah cookie BOLEH diubah,
+  // sedangkan di Server Component (halaman kuitansi) tidak boleh. Kalau
+  // tokeninstead dialihkan lewat /api/.../ambil, peramban akan melakukan
+  // navigasi sisi-klien ke route handler dan tidak mengikuti redirect-nya.
+  if (!idEdit && token) {
+    await simpanIzinTamu(baru, token);
+  }
   redirect(`/kuitansi/${baru}`);
 }
 
 /** Hapus pesanan sendiri (hanya kalau belum lunas). */
 export async function aksiHapusPesanan(formData: FormData): Promise<void> {
-  const u = await wajibSiswa();
-  if (!(await csrfAman(formData))) redirect('/pesanan-saya');
+  const u = await currentUser();
+  if (u && u.peran !== 'user') redirect(homePath(u));
+  if (!(await csrfAman(formData))) redirect(u ? '/pesanan-saya' : '/cek');
 
   const id = Number(teks(formData.get('id'))) || 0;
-  const p = await pesananMilik(u, id);
+  const p = u
+    ? await pesananMilik(u, id)
+    : await pesananMilikTamu(id, await tokenTersimpan(id));
 
   if (!p) {
     await flash('bad', 'Pesanan tidak ditemukan.');
@@ -87,17 +115,22 @@ export async function aksiHapusPesanan(formData: FormData): Promise<void> {
  * Unggah bukti transfer ditangani terpisah oleh aksi di /api/upload.
  */
 export async function aksiBayar(formData: FormData): Promise<void> {
-  const u = await wajibSiswa();
-  if (!(await csrfAman(formData))) redirect('/pesanan-saya');
+  const u = await currentUser();
+  if (u && u.peran !== 'user') redirect(homePath(u));
+  if (!(await csrfAman(formData))) redirect(u ? '/pesanan-saya' : '/cek');
 
   const id = Number(teks(formData.get('id'))) || 0;
   const metode = teks(formData.get('metode'));
   const pathnameBukti = teks(formData.get('bukti'), '');
+  // Tamu yang tidak punya akun diarahkan kembali ke /cek, bukan daftar.
+  const kembali = u ? '/pesanan-saya' : '/cek';
 
-  const p = await pesananMilik(u, id);
+  const p = u
+    ? await pesananMilik(u, id)
+    : await pesananMilikTamu(id, await tokenTersimpan(id));
   if (!p) {
     await flash('bad', 'Pesanan tidak ditemukan.');
-    redirect('/pesanan-saya');
+    redirect(kembali);
   }
   if (p.statusBayar === 'sudah') {
     await flash('warn', 'Pesanan ini sudah lunas.');
@@ -105,7 +138,7 @@ export async function aksiBayar(formData: FormData): Promise<void> {
   }
   if (p.status === 'dibatalkan') {
     await flash('warn', 'Pesanan ini sudah dibatalkan.');
-    redirect('/pesanan-saya');
+    redirect(kembali);
   }
 
   const db = getDb();
@@ -121,7 +154,7 @@ export async function aksiBayar(formData: FormData): Promise<void> {
       .set({ metode: 'cash', statusBayar: 'belum', buktiTransfer: null })
       .where(eq(pesanan.id, id));
     await flash('ok', 'Metode cash dipilih. Bayar langsung ke panitia, lalu admin akan mengonfirmasi.');
-    redirect('/pesanan-saya');
+    redirect(kembali);
   }
 
   if (metode === 'transfer') {
@@ -145,7 +178,7 @@ export async function aksiBayar(formData: FormData): Promise<void> {
       .set({ metode: 'transfer', statusBayar: 'menunggu_verifikasi', buktiTransfer: pathnameBukti })
       .where(eq(pesanan.id, id));
     await flash('ok', 'Bukti transfer terkirim. Menunggu verifikasi admin.');
-    redirect('/pesanan-saya');
+    redirect(kembali);
   }
 
   await flash('bad', 'Pilih metode pembayaran.');

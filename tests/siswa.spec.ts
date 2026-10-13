@@ -36,6 +36,7 @@ async function pesanFoto(page: Page) {
   await page.goto('/pesan');
   await tungguHydrate(page);
   await page.fill('#nama', 'Budi Santoso');
+  await page.fill('#telepon', '081234567890');
   await page.selectOption('#jurusan_id', { index: 1 });
   await page.selectOption('#kelas_id', { index: 1 });
   // Tambah 2 Cetak Foto A4 + 1 Bingkai

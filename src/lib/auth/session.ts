@@ -25,6 +25,15 @@ export type JenisFlash = 'ok' | 'bad' | 'warn' | 'info';
 export type DataSesi = {
   flash?: Array<{ type: JenisFlash; msg: string }>;
   oauthState?: string;
+  /**
+   * Pesanan yang boleh dibuka tanpa login, dipetakan ke tokennya.
+   *
+   * Dipakai supaya begitu pemesan lolos sekali lewat /cek, tokennya
+   * tersimpan di sesinya. Setelah itu tautan kuitansi tidak lagi perlu
+   * menyertakan ?t=... yang bisa bocor lewat riwayat browser atau log
+   * server. Padanan $_SESSION['tamu'] di versi PHP.
+   */
+  tamu?: Record<string, string>;
 };
 
 function secret(): string {

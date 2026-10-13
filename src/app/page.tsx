@@ -41,11 +41,14 @@ export default async function Beranda() {
             </>
           ) : (
             <>
-              <Link href="/daftar" className="btn gold">
-                Daftar &amp; Pesan
+              <Link href="/pesan" className="btn gold">
+                Pesan Sekarang (tanpa login)
+              </Link>
+              <Link href="/cek" className="btn ghost">
+                Cek Pesanan
               </Link>
               <Link href="/masuk" className="btn ghost">
-                Sudah punya akun? Masuk
+                Punya akun? Masuk
               </Link>
             </>
           )}
@@ -78,8 +81,17 @@ export default async function Beranda() {
       <div className="card">
         <h2>Cara Memesan</h2>
         <ol>
-          <li>Daftar / masuk (bisa pakai akun Google).</li>
-          <li>Isi form pemesanan: nama, kelas, jenis foto, dan jumlah.</li>
+          <li>
+            Catat <b>kode pesanan</b>-mu. Lihat kuitansi / foto hasil lagi lewat menu{' '}
+            <a href="/cek">Cek Pesanan</a> (kode + nomor HP).
+          </li>
+          <li>
+            Klik <b>Pesan Sekarang</b> — tidak perlu login. (Punya akun? Boleh masuk dulu, bisa
+            pakai Google.)
+          </li>
+          <li>
+            Isi form pemesanan: nama, nomor HP, jurusan &amp; kelas, jenis foto, dan jumlah.
+          </li>
           <li>Pilih pembayaran <b>cash</b> atau <b>transfer</b>.</li>
           <li>
             Setelah memesan, kamu langsung mendapat <b>kuitansi</b> dan <b>nomor antrian</b>; nomor

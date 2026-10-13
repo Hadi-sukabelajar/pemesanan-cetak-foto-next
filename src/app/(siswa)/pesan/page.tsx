@@ -1,7 +1,10 @@
 import type { Metadata } from 'next';
 import { eq, asc } from 'drizzle-orm';
 import { Ruang, KepalaHalaman } from '@/components/Ruang';
-import { wajibSiswa } from '@/lib/auth/rbac';
+import { homePath } from '@/lib/auth/rbac';
+import { currentUser } from '@/lib/auth/session';
+import { tokenTersimpan } from '@/lib/tamu';
+import { pesananMilikTamu } from '@/lib/pesanan-akses';
 import { csrfToken } from '@/lib/auth/csrf';
 import { FormCsrf } from '@/components/FormCsrf';
 import { BarisProduk } from '@/components/BarisProduk';
@@ -20,22 +23,31 @@ export default async function HalamanPesan({
 }: {
   searchParams: Promise<{ id?: string }>;
 }) {
-  const u = await wajibSiswa();
+  // Terbuka untuk semua, termasuk tamu tanpa akun.
+  const u = await currentUser();
+  // Admin/guru/fotografer tidak memakai form pemesanan siswa.
+  if (u && u.peran !== 'user') redirect(homePath(u));
+
   const { id: idParam } = await searchParams;
   const idEdit = Number(idParam) || 0;
 
-  // Saat mengedit, pesanan HARUS milik pengguna ini.
+  // Saat mengedit, pesanan HARUS milik pengguna ini — atau, untuk tamu,
+  // harus dipegang token-nya. Tanpa itu, ?id= dipakai untuk mengintip
+  // pesanan orang lain.
   let edit = null;
   const qtyAwal: Record<number, number> = {};
   if (idEdit) {
-    const db = getDb();
-    const [p] = await db
-      .select()
-      .from(pesanan)
-      .where(eq(pesanan.id, idEdit))
-      .limit(1);
-    if (!p || p.penggunaId !== u.id) {
-      redirect('/pesanan-saya');
+    const p = u
+      ? ((await getDb()
+          .select()
+          .from(pesanan)
+          .where(eq(pesanan.id, idEdit))
+          .limit(1))[0] ?? null)
+      : await pesananMilikTamu(idEdit, await tokenTersimpan(idEdit));
+
+    const milikSendiri = p && (u ? p.penggunaId === u.id : true);
+    if (!p || !milikSendiri) {
+      redirect(u ? '/pesanan-saya' : '/cek');
     }
     // Pesanan yang sudah lunas / buktinya sudah dikirim / dibatalkan
     // isinya tidak boleh diubah — hanya data pemesan yang masih bisa dirapikan.
@@ -44,7 +56,7 @@ export default async function HalamanPesan({
       p.statusBayar === 'menunggu_verifikasi' ||
       p.status === 'dibatalkan'
     ) {
-      redirect('/pesanan-saya');
+      redirect(u ? '/pesanan-saya' : '/cek');
     }
     edit = p;
     for (const it of await itemPesanan(idEdit)) {
@@ -68,7 +80,7 @@ export default async function HalamanPesan({
     foto: fotoProduk(p),
   }));
 
-  const kelasAwal = edit?.kelasId ?? u.kelasId ?? 0;
+  const kelasAwal = edit?.kelasId ?? u?.kelasId ?? 0;
 
   return (
     <Ruang judul={edit ? 'Ubah Pesanan' : 'Pesan Foto'} aktif="pesan">
@@ -88,15 +100,39 @@ export default async function HalamanPesan({
         <div className="order-main">
           <div className="card">
             <h2>Data Pemesan</h2>
+            {!u && (
+              <div className="alert a-info">
+                Kamu memesan tanpa akun. Setelah mengirim, catat <b>kode pesanan</b> dan nomor
+                HP-mu untuk membuka kuitansi lagi lewat menu Cek Pesanan.
+              </div>
+            )}
+
             <label htmlFor="nama">Nama</label>
             <input
               type="text"
               id="nama"
               name="nama"
-              defaultValue={edit?.nama ?? u.nama}
+              defaultValue={edit?.nama ?? u?.nama ?? ''}
               required
               maxLength={100}
             />
+
+            <label htmlFor="telepon">Nomor HP / WhatsApp</label>
+            <input
+              type="tel"
+              id="telepon"
+              name="telepon"
+              defaultValue={edit?.telepon ?? u?.telepon ?? ''}
+              required
+              maxLength={20}
+              inputMode="tel"
+              placeholder="08xxxxxxxxxx"
+              autoComplete="tel"
+            />
+            <div className="hint">
+              Dipakai panitia bila perlu menghubungi, dan sebagai kunci untuk membuka pesanan
+              ini lagi lewat <b>Cek Pesanan</b>.
+            </div>
             <PilihJurusanKelas
               jurusan={jurusan}
               kelas={daftarKelas}
@@ -108,7 +144,7 @@ export default async function HalamanPesan({
           <h2 className="section-title">
             Pilih Jenis Pesanan <span className="muted">(isi jumlah)</span>
           </h2>
-          <BarisProduk produk={produk} />
+          <BarisProduk produk={produk} qtyAwal={qtyAwal} />
 
           <div className="card">
             <label htmlFor="catatan" style={{ marginTop: 0 }}>

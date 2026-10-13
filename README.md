@@ -7,6 +7,8 @@ Versi PHP/MySQL lama tetap tersimpan di branch `legacy-php` untuk perbandingan.
 
 ## Fitur
 
+- **Pemesan tanpa akun** — pesan foto tanpa harus daftar, lalu kembali ke
+  kuitansinya lewat **Cek Pesanan** (kode pesanan + nomor HP).
 - **Siswa** — daftar akun, pesan paket per kelas, bayar (transfer/cash),
   unggah bukti transfer, unduh kuitansi, lihat status pesanan.
 - **Admin** — dashboard, monitor, antrian pembayaran, transaksi offline,
@@ -72,6 +74,23 @@ npm run typecheck
 npm run lint
 ```
 
+## Cara kerja pemesan tanpa login
+
+Form `/pesan` terbuka untuk semua orang. Setiap pesanan — baik dari akun
+maupun tamu — mendapat **token acak 32 karakter hex** yang menjadi kunci
+akses ke kuitansi, bukti transfer, dan foto hasilnya.
+
+- Begitu pesanan dibuat, token langsung diserap ke sesi lalu Pengunjung
+  diarahkan ke `/kuitansi/<id>` **tanpa** token di URL, supaya tidak bocor
+  lewat riwayat browser atau log server.
+- Kalau lupa, pemesan membuka `/cek` dan memasukkan **kode pesanan + nomor
+  HP**. Kalau cocok, aksesnya dipulihkan.
+- Nomor HP dinormalisasi (62…, +62…, dan 08… dianggap sama) dan **wajib
+  diisi semua orang**, bukan hanya tamu.
+
+Nomor HP hanya dipakai sebagai kunci pemulihan pesanan; tidak dikirim ke
+mana pun.
+
 ## Akun bawaan
 
 `npm run db:seed` membuat akun berikut. Password semuanya `123456789` —
@@ -100,7 +119,7 @@ Tambahkan environment variable berikut di Vercel:
 
 | Nama                    | Keterangan                                                            |
 | ----------------------- | --------------------------------------------------------------------- |
-| `DATABASE_URL`          | Connection string Neon                                                |
+| `DATABASE_URL`          | Connection string Neon (wajib berawalan `postgresql://`; pakai yang berakhiran `-pooler.` untuk produksi)             |
 | `SESSION_SECRET`        | Hex acak ≥ 32 karakter. Generate dengan perintah di `.env.example`.   |
 | `BLOB_READ_WRITE_TOKEN` | Token Vercel Blob (dibuat otomatis saat Blob di-connect).             |
 | `GOOGLE_CLIENT_ID`      | Opsional. Kosongkan untuk menyembunyikan tombol login Google.         |
@@ -173,6 +192,8 @@ Aturan yang dijaga di kode dan diuji otomatis:
   awalan `' ` agar tidak jadi formula di Excel.
 - Session memakai cookie HMAC; isi sesi disimpan di database sehingga tetap
   valid lintas instance serverless.
+- Pesanan hanya bisa dibuka oleh pemiliknya, pemegang tokennya, atau admin/guru.
+- Bukti transfer hanya untuk pemilik, pemegang token, atau admin (bukan guru).
 - Halaman `/setup` terkunci permanen setelah admin pertama dibuat, dan tidak
   bisa dibuatkan admin kedua dari sana.
 - Redirect OAuth memakai host dari request (`X-Forwarded-Host`), bukan URL
@@ -184,9 +205,12 @@ Aturan yang dijaga di kode dan diuji otomatis:
 src/app/(admin)/      halaman dashboard, antrian, pesanan, transaksi,
                       riwayat, monitor, upload-foto, arsip, pengguna,
                       produk, jurusan, pengaturan, transaksi/[id]
-src/app/(auth)/       masuk, daftar, setup admin pertama
+src/app/(auth)/       masuk, daftar, cek pesanan, setup admin pertama
+src/lib/tamu.ts       token akses pemesan tanpa login
+src/lib/telepon.ts    normalisasi & validasi nomor HP
 src/app/(siswa)/      pesan, pesanan-saya, pembayaran, kuitansi
-src/app/api/          ekspor CSV, bukti/foto (berkas privat), unggah, OAuth Google
+src/app/api/          ekspor CSV, bukti/foto (berkas privat), unggah,
+                      OAuth Google, penyerapan token, pembersihan cron
 src/lib/auth/         sesi, RBAC, CSRF, rate limit, password
 src/lib/orders.ts     seluruh logika bisnis pesanan
 src/lib/blob.ts       Vercel Blob + validasi magic bytes

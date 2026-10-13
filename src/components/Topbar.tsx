@@ -31,10 +31,16 @@ function menu(u: Pengguna): ItemNav[] {
       return [{ href: '/upload-foto', label: 'Upload Foto', kunci: 'foto' }];
     case 'guru':
       return [{ href: '/monitor', label: 'Monitor', kunci: 'monitor', gaya: 'mon' }];
-    default:
+    case 'user':
       return [
         { href: '/pesan', label: 'Pesan Foto', kunci: 'pesan' },
         { href: '/pesanan-saya', label: 'Pesanan Saya', kunci: 'riwayat' },
+      ];
+    default:
+      // Tamu: pesan tanpa login, lalu kembali lewat Cek Pesanan.
+      return [
+        { href: '/pesan', label: 'Pesan Foto', kunci: 'pesan' },
+        { href: '/cek', label: 'Cek Pesanan', kunci: 'cek' },
       ];
   }
 }
@@ -83,6 +89,8 @@ export function Topbar({
 }) {
   const item = u ? menu(u) : [];
   const belumMasuk = [
+    { href: '/pesan', label: 'Pesan Foto', kunci: 'pesan' },
+    { href: '/cek', label: 'Cek Pesanan', kunci: 'cek' },
     { href: '/masuk', label: 'Masuk' },
     { href: '/daftar', label: 'Daftar' },
   ];
@@ -93,7 +101,11 @@ export function Topbar({
       <nav className="nav">
         {!u &&
           belumMasuk.map((i) => (
-            <Link key={i.href} href={i.href} className={aktif === i.href.slice(1) ? 'on' : ''}>
+            <Link
+              key={i.href}
+              href={i.href}
+              className={aktif === i.kunci ? 'on' : ''}
+            >
               {i.label}
             </Link>
           ))}

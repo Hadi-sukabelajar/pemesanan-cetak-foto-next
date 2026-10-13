@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
-import { wajibSiswa, wajibFoto } from '@/lib/auth/rbac';
+import { wajibFoto } from '@/lib/auth/rbac';
+import { currentUser } from '@/lib/auth/session';
+import { bolehUnggahBuktiTamu } from '@/lib/tamu';
 import { get, head } from '@vercel/blob';
 import { aturanUnggah, deteksiJenis, hapusBlob } from '@/lib/blob';
 
@@ -20,6 +22,7 @@ export async function POST(request: Request) {
   const raw = (await request.json().catch(() => ({}))) as {
     pathname?: unknown;
     jenis?: unknown;
+    pesanan_id?: unknown;
   };
 
   const aturan = aturanUnggah(raw.jenis ?? 'bukti');
@@ -27,9 +30,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, pesan: 'Jenis unggahan tidak dikenal.' }, { status: 400 });
   }
 
+  // Sama seperti /api/unggah-token: tamu pemilik pesanan boleh mengunggah
+  // bukti transfer untuk pesanannya sendiri.
   try {
-    if (aturan.label === 'Bukti transfer') await wajibSiswa();
-    else await wajibFoto();
+    if (aturan.label === 'Bukti transfer') {
+      const u = await currentUser();
+      if (u && u.peran !== 'user') {
+        return NextResponse.json({ ok: false, pesan: 'Unauthorized' }, { status: 401 });
+      }
+      if (!u && !(await bolehUnggahBuktiTamu(raw.pesanan_id))) {
+        return NextResponse.json({ ok: false, pesan: 'Unauthorized' }, { status: 401 });
+      }
+    } else {
+      await wajibFoto();
+    }
   } catch {
     return NextResponse.json({ ok: false, pesan: 'Unauthorized' }, { status: 401 });
   }
