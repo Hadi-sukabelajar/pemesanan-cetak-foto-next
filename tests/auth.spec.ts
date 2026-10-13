@@ -144,12 +144,29 @@ test.describe('Autentikasi', () => {
     // Beranda menampilkan topbar lengkap untuk pengguna yang sudah login.
     await page.goto('/');
     await expect(page.locator('nav.nav')).toBeVisible();
-    await page.getByRole('button', { name: /Keluar/ }).click();
+    await page.locator('nav.nav').getByRole('button', { name: /Keluar/ }).click();
 
     await expect(page.locator('.alert.a-ok')).toContainText(/keluar/i);
     // Tombol Keluar harus hilang lagi setelah keluar.
     await expect(page.getByRole('button', { name: /Keluar/ })).toHaveCount(0);
     // Dan halaman khusus siswa harus mengarahkan ke halaman masuk.
+    await page.goto('/pesanan-saya');
+    await expect(page).toHaveURL(/\/masuk/);
+  });
+
+  test('keluar dari tombol beranda memakai aksi POST', async ({ page }) => {
+    await masuk(page, 'admin1', '123456789');
+    await page.waitForURL((u) => !u.pathname.startsWith('/masuk'), { timeout: 15_000 });
+    await page.goto('/');
+
+    // Tombol beranda tidak boleh menjadi tautan mati ke /keluar.
+    await expect(page.locator('.hero a[href="/keluar"]')).toHaveCount(0);
+    const tombolBeranda = page.locator('.hero').getByRole('button', { name: /Keluar \(/ });
+    await expect(tombolBeranda).toBeVisible();
+    await tombolBeranda.click();
+
+    await expect(page.locator('.alert.a-ok')).toContainText(/keluar/i);
+    await expect(page.locator('.hero').getByRole('button', { name: /Keluar \(/ })).toHaveCount(0);
     await page.goto('/pesanan-saya');
     await expect(page).toHaveURL(/\/masuk/);
   });

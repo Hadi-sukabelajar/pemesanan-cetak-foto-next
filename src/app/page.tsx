@@ -4,13 +4,17 @@ import { currentUser } from '@/lib/auth/session';
 import { homePath } from '@/lib/auth/rbac';
 import { pengaturanMap, namaSekolah, judulAcara } from '@/lib/settings';
 import { produkAktif, fotoProduk } from '@/lib/orders';
+import { csrfToken } from '@/lib/auth/csrf';
+import { FormCsrf } from '@/components/FormCsrf';
+import { aksiKeluar } from '@/app/(auth)/actions';
 import { rupiah } from '@/lib/format';
 
 export default async function Beranda() {
-  const [u, set, produk] = await Promise.all([
+  const [u, set, produk, csrf] = await Promise.all([
     currentUser(),
     pengaturanMap(),
     produkAktif(),
+    csrfToken(),
   ]);
   const sekolah = namaSekolah(set);
   const acara = judulAcara(set);
@@ -35,9 +39,12 @@ export default async function Beranda() {
                   + Transaksi Baru
                 </Link>
               )}
-              <Link href="/keluar" className="btn ghost">
-                Keluar ({u.nama})
-              </Link>
+              <form action={aksiKeluar} style={{ display: 'contents' }}>
+                <FormCsrf token={csrf} />
+                <button type="submit" className="btn ghost">
+                  Keluar ({u.nama})
+                </button>
+              </form>
             </>
           ) : (
             <>
