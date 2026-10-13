@@ -105,6 +105,7 @@ Tambahkan environment variable berikut di Vercel:
 | `BLOB_READ_WRITE_TOKEN` | Token Vercel Blob (dibuat otomatis saat Blob di-connect).             |
 | `GOOGLE_CLIENT_ID`      | Opsional. Kosongkan untuk menyembunyikan tombol login Google.         |
 | `GOOGLE_CLIENT_SECRET`  | Opsional.                                                              |
+| `CRON_SECRET`           | Wajib. Menggatasi endpoint pembersihan sesi berkala.                   |
 
 `SESSION_SECRET` wajib diganti sebelum deploy. Jangan pernah commit nilai ini.
 
@@ -142,7 +143,17 @@ Bila `SETUP_KEY` diisi di environment, kode itu juga wajib dimasukkan saat
 membuat admin — ini mencegah orang lain membuat admin duluan di server yang
 baru online.
 
-### 6. Deploy
+### 6. Pembersihan otomatis
+
+Tabel `sesi` dan `percobaan_login` dibersihkan sekali sehari lewat Vercel Cron
+(`vercel.json`, pukul 03:00 UTC). Endpoint `/api/cron/bersihkan` **hanya**
+menjalankan kalau header `Authorization` cocok dengan `CRON_SECRET` — kalau
+`CRON_SECRET` dikosongkan, endpoint otomatis dimatikan (balas 503) supaya tidak
+bisa dipanggil siapa saja.
+
+Tanpa ini, baris-baris tersebut akan menumpuk selamanya.
+
+### 7. Deploy
 
 ```bash
 vercel --prod
