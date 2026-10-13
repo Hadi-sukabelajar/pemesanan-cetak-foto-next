@@ -47,6 +47,44 @@ async function pesanFoto(page: Page) {
   await page.getByRole('button', { name: /Submit Pesanan/ }).click();
 }
 
+test.describe('Unggah bukti transfer', () => {
+  test('klik "Unggah bukti" tidak me-reload halaman dan selalu memberi status', async ({
+    page,
+  }) => {
+    await daftarSiswa(page);
+    await pesanFoto(page);
+    await page.waitForURL(/\/kuitansi\/\d+/, { timeout: 20_000 });
+    const id = page.url().split('/').pop()!;
+
+    await page.goto(`/pesan/${id}/bayar`);
+    await page.locator('.pay-choice label', { hasText: 'Transfer' }).click();
+    await expect(page.locator('#berkas-bukti')).toHaveCount(1);
+
+    await page.locator('#berkas-bukti').setInputFiles({
+      name: 'bukti.png',
+      mimeType: 'image/png',
+      // PNG 1x1 yang sah.
+      buffer: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
+        'base64',
+      ),
+    });
+
+    const sebelum = page.url();
+    await page.getByRole('button', { name: /Unggah bukti/i }).click();
+
+    // Unggah dulu memakai <form> di dalam <form> pembayaran. Form bersarang
+    // membuat tombol type="submit" mengaktifkan submit bawaan ke form LUAR:
+    // halaman di-reload dengan GET, berkas hilang, dan tidak ada pesan apa pun.
+    // Di sini kita pastikan URL tetap dan pengguna selalu melihat status.
+    await page.waitForTimeout(3000);
+    expect(page.url(), 'halaman jangan sampai reload ke ?').toBe(sebelum);
+    await expect(page.locator('.hint').first()).toContainText(/mengunggah|gagal|token|berkas/i, {
+      timeout: 15_000,
+    });
+  });
+});
+
 test.describe('Alur siswa', () => {
   test('pesan foto mendapat kuitansi & nomor antrian', async ({ page }) => {
     await daftarSiswa(page);

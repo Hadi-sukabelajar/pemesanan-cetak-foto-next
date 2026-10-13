@@ -36,8 +36,20 @@ export function UnggahLangsung({
   const [sibuk, setSibuk] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  async function pilihBerkas(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  /**
+   * Catatan penting: komponen ini TIDAK memakai <form>.
+   *
+   * Komponen ini berada DI DALAM form pembayaran (`<form action="/api/bayar">`),
+   * dan HTML tidak mengizinkan <form> di dalam <form>. Karena formnya dibuat
+   * oleh React (bukan oleh parser HTML), peramban tidak membuat penunjuk
+   * "form owner" untuk form bagian dalam — sehingga tombol type="submit"
+   * milik kita justru memicu submit ke form LUAR: halaman di-reload dengan GET,
+   * berkas yang dipilih hilang, dan tidak ada pesan apa pun ke pengguna.
+   *
+   * Karena itu tombolnya `type="button"` dan penanganannya dipanggil langsung
+   * lewat onClick.
+   */
+  async function pilihBerkas() {
     const file = inputRef.current?.files?.[0];
     if (!file) {
       setStatus('Pilih berkas terlebih dahulu.');
@@ -78,7 +90,7 @@ export function UnggahLangsung({
   }
 
   return (
-    <form onSubmit={pilihBerkas}>
+    <div>
       <label htmlFor={`berkas-${folder}`}>{label}</label>
       <input
         type="file"
@@ -88,12 +100,17 @@ export function UnggahLangsung({
         disabled={sibuk}
       />
       <div className="row mt">
-        <button className="btn ghost sm" type="submit" disabled={sibuk}>
+        <button
+          className="btn ghost sm"
+          type="button"
+          disabled={sibuk}
+          onClick={pilihBerkas}
+        >
           {sibuk ? 'Mengunggah...' : tombol}
         </button>
         {nama && <span className="muted">Tersimpan: {nama}</span>}
       </div>
       {status && <div className="hint">{status}</div>}
-    </form>
+    </div>
   );
 }

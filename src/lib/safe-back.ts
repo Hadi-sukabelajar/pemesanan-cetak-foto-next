@@ -1,45 +1,61 @@
 /**
- * Tujuan redirect setelah aksi admin.
+ * Tujuan redirect setelah sebuah aksi.
  *
- * Di PHP ada bug: `safe_back()` hanya mengecek pola `^admin/[...]` yang
- * mengizinkan titik dan garis miring, sehingga `back=admin/../../evil.php`
- * lolos dan menerbitkan Location ke luar aplikasi (open redirect /
- * path traversal). Sekarang setiap segmen "." dan ".." ditolak, termasuk
- * bentuk URL-encode seperti `admin/%2e%2e/`.
+ * Asalnya (versi PHP) `safe_back()` hanya menerima path yang diawali
+ * `admin/`, jadi ditulis di folder admin saja. Pola itu sudah tidak relevan di
+ * Next.js, yang memakai route seperti `/transaksi/40` atau `/pesanan`.
+ *
+ * Kalau POLA lamanya masih dipakai, SEMUA nilai `back` dari form admin
+ * ditolak dan jatuh ke halaman cadangan — artinya setiap tombol "Tandai
+ * lunas", "Tolak bukti", "Ubah status", atau "Hapus" melempar admin ke
+ * dashboard, bukan kembali ke halaman yang sedang dikerjakan.
+ *
+ * Yang tetap dijaga di sini:
+ *  - tujuan wajib path INTERNAL (diawali satu `/`),
+ *  - `//host` dan `\` ditolak supaya tidak jadi open redirect,
+ *  - `.` / `..` ditolak (termasuk bentuk URL-encode) supaya tidak ada path
+ *    traversal,
+ *  - karakter kontrol (newline, NUL) ditolak supaya tidak bisa merusak
+ *    header Location.
  */
 
-const POLA = /^admin\/[A-Za-z0-9_./?=&%+-]*$/;
+const KARAK_KONTROL = /[\r\n\0]/;
+const TRAVERSAL = /(^|\/)\.\.?(?:\/|\?|$)/;
 
-/** Hanya izinkan path di dalam folder admin/ (tanpa query string bebas). */
-function jalurAman(path: string): boolean {
-  if (path === '' || path.includes('\r') || path.includes('\n') || path.includes('\0')) {
-    return false;
-  }
-  if (!POLA.test(path)) return false;
-  // Periksa bentuk asli dan bentuk yang sudah di-decode.
-  const bentuk = [path, decodeURIComponent(path), decodeURIComponent(decodeURIComponent(path))];
-  for (const b of bentuk) {
-    if (/(^|\/)\.\.?(?:\/|\?|$)/.test(b)) return false;
-    if (b.includes('//')) return false;
+/** Path internal yang aman untuk dijadikan tujuan redirect. */
+export function jalurInternalAman(path: string): boolean {
+  if (path === '' || KARAK_KONTROL.test(path)) return false;
+  // Wajib diawali satu '/', dan TIDAK boleh "//" (protocol-relative).
+  if (!path.startsWith('/') || path.startsWith('//')) return false;
+  if (path.includes('\\')) return false;
+
+  // Periksa bentuk asli dan bentuk yang sudah di-decode, supaya
+  // "/%2e%2e/" tidak lolos.
+  for (const bentuk of [path, decodeURIComponent(path), decodeURIComponent(decodeURIComponent(path))]) {
+    if (KARAK_KONTROL.test(bentuk)) return false;
+    if (bentuk.startsWith('//') || bentuk.includes('\\')) return false;
+    if (TRAVERSAL.test(bentuk)) return false;
   }
   return true;
 }
 
-/** Bersihkan nilai `back` dari form; selalu mengembalikan path yang aman. */
-export function safeBack(nilai: string | null | undefined, cadangan = '/dashboard'): string {
+/** Bersihkan nilai `back` dari form; selalu mengembalikan path internal. */
+export function safeBack(
+  nilai: string | null | undefined,
+  cadangan = '/dashboard',
+): string {
   if (!nilai) return cadangan;
   const [path] = nilai.split('#');
-  return jalurAman(path) ? path : cadangan;
+  return jalurInternalAman(path) ? path : cadangan;
 }
 
 /**
- * Sama seperti safeBack, tapi untuk halaman siswa/user.
- * Menerima path internal apa pun yang diawali "/".
+ * Sama seperti safeBack, dipakai untuk halaman siswa/user.
+ * Perbedaannya hanya nilai cadangannya.
  */
-export function safeInternal(nilai: string | null | undefined, cadangan: string): string {
-  if (!nilai) return cadangan;
-  if (!nilai.startsWith('/')) return cadangan;
-  if (nilai.startsWith('//') || nilai.includes('\\')) return cadangan;
-  if (nilai.includes('\r') || nilai.includes('\n') || nilai.includes('\0')) return cadangan;
-  return nilai;
+export function safeInternal(
+  nilai: string | null | undefined,
+  cadangan: string,
+): string {
+  return safeBack(nilai, cadangan);
 }

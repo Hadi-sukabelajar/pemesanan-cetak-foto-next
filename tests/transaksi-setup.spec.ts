@@ -16,7 +16,11 @@ async function masuk(page: Page) {
 }
 
 /** Buat pesanan offline lalu kembalikan URL kuitansinya. */
-async function buatPesananOffline(page: Page, nama: string): Promise<string> {
+async function buatPesananOffline(
+  page: Page,
+  nama: string,
+  bayar: '' | 'cash' | 'transfer' = 'cash',
+): Promise<string> {
   await page.goto('/transaksi');
   await page.waitForFunction(
     () => document.querySelectorAll('input[type=number]').length > 0,
@@ -28,7 +32,7 @@ async function buatPesananOffline(page: Page, nama: string): Promise<string> {
   await page.selectOption('#jurusan_id', { index: 1 });
   await page.selectOption('#kelas_id', { index: 1 });
   await page.getByRole('button', { name: /Tambah Cetak Foto A4/ }).click();
-  await page.selectOption('#bayar', 'cash');
+  await page.selectOption('#bayar', bayar);
   await page.getByRole('button', { name: 'Simpan Transaksi' }).click();
   await page.waitForURL(/\/kuitansi\/\d+/, { timeout: 20_000 });
   return page.url();
@@ -84,6 +88,25 @@ test.describe('Edit pesanan offline', () => {
     await page.goto(`/transaksi/${id}`);
     await expect(page.locator('#nama')).toHaveValue(penanda);
     expect(await page.locator('.totalbar').innerText()).toBe(totalSebelum);
+  });
+
+  test('aksi admin kembali ke halaman asal, bukan ke dashboard', async ({ page }) => {
+    await masuk(page);
+    const penanda = `Balik${Date.now().toString().slice(-6)}`;
+    // Belum dibayar — supaya tombol "Tandai lunas" tersedia.
+    const url = await buatPesananOffline(page, penanda, '');
+    const id = url.split('/').pop()!;
+    page.once('dialog', (d) => d.accept());
+
+    await page.goto(`/transaksi/${id}`);
+    await page.getByRole('button', { name: 'Tandai lunas' }).click();
+
+    // `back` pada form aksi harus dihormati. Sebelumnya semua path ditolak
+    // oleh safeBack sehingga admin selalu mendarat di /dashboard.
+    await page.waitForURL(new RegExp(`/transaksi/${id}$`), { timeout: 20_000 });
+    await expect(page.locator('#nama')).toHaveValue(penanda);
+    await expect(page.locator('.alert.a-ok')).toContainText('dikonfirmasi lunas');
+    await expect(page.locator('.badge').first()).toHaveText(/lunas/i);
   });
 
   test('id yang tidak ada menampilkan halaman tidak ditemukan', async ({ page }) => {
