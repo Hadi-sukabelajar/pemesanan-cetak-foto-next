@@ -149,18 +149,59 @@ export async function hapusBlob(pathname: string | null | undefined): Promise<vo
 }
 
 /**
- * Pastikan pathname benar-benar milik folder milik aplikasi ini
- * (bukti/ atau hasil/), sehingga tidak bisa diselipkan lewat form.
+ * Pemeriksaan pathname berkas di Vercel Blob.
+ *
+ * Pathname yang sampai ke server SELALU punya bentuk:
+ *
+ *     <folder>/<nama-asli><suffix-acak>.<ekstensi>
+ *
+ * contoh: `bukti/transfer-GzDImKcfDWes5jDlNDG9mLg1wupPBs.png`
+ *
+ * Sufiks acak itu dibuat Vercel (addRandomSuffix) dan berisi huruf besar
+ * serta angka — bukan hanya heksadesimal kecil. Versi lama regexp-nya
+ * hanya menerima nama berkas yang isinya heksadesimal murni, sehingga
+ * SETIAP unggahan dari browser ditolak dengan "Berkas tidak dikenali".
+ * Unggahan hanya mungkin berhasil kalau nama berkas dibikin seluruhnya
+ * acak di server (jalur `simpanBerkas`) — padahal itu bukan jalur yang
+ * dipakai pemesan.
+ *
+ * Yang tetap dijaga di sini:
+ *  - folder persis 'bukti' atau 'hasil' (tidak bisa keluar dari foldernya),
+ *  - nama berkas hanya boleh huruf, angka, titik, garis, dan strip,
+ *  - '..' dan '/' di dalam nama ditolak (anti path traversal),
+ *  - ekstensi wajib salah satu yang diizinkan,
+ *  - panjang dibatasi supaya storage tidak bisa dibanjiri.
  */
+
+const EKSTENSI_BUKTI = 'jpg|png|webp|pdf';
+const EKSTENSI_HASIL = 'jpg|png|webp';
+
+/** Panjang nama berkas (tanpa folder). */
+const MAKS_NAMA = 150;
+
+function pathnameValid(pathname: string, folder: string, ekstensi: string): boolean {
+  if (typeof pathname !== 'string') return false;
+
+  const awalan = `${folder}/`;
+  if (!pathname.startsWith(awalan)) return false;
+
+  const nama = pathname.slice(awalan.length);
+
+  if (nama === '' || nama.length > MAKS_NAMA) return false;
+  if (nama.includes('/') || nama.includes('..')) return false;
+  if (nama.includes('\\') || /[\r\n\0]/.test(nama)) return false;
+
+  return new RegExp(`^[A-Za-z0-9][A-Za-z0-9._-]*\\.(${ekstensi})$`).test(nama);
+}
+
 export function validasiPathnameBukti(pathname: string): boolean {
-  // Suffix acak dari Vercel Blob (addRandomSuffix) bisa beberapa panjang,
-  // jadi tidak dikunci ke jumlah digit tertentu.
-  return /^bukti\/[a-f0-9]{8,64}\.(jpg|png|webp|pdf)$/.test(pathname);
+  return pathnameValid(pathname, 'bukti', EKSTENSI_BUKTI);
 }
 
 export function validasiPathnameHasil(pathname: string): boolean {
-  return /^hasil\/[a-f0-9]{8,64}\.(jpg|png|webp)$/.test(pathname);
+  return pathnameValid(pathname, 'hasil', EKSTENSI_HASIL);
 }
+
 /** Aturan per jenis unggahan: batas ukuran, tipe konten, dan pola pathname. */
 export type AturanUnggah = {
   maks: number;
