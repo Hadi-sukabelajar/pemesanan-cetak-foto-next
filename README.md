@@ -47,7 +47,17 @@ Aplikasi memakai `.env.local` yang **tidak** ikut ter-commit (lihat `.gitignore`
 Pengujian memakai Playwright terhadap **build produksi**.
 
 ```bash
-./jalankan-tes.sh
+./jalankan-tes.sh   # 44 tes: auth, siswa, admin, CRUD, edit pesanan, Google
+```
+
+### Tes instalasi admin pertama
+
+`/setup` hanya terbuka saat database benar-benar kosong, jadi tesnya memakai
+database dan server sendiri (port 3001) dan **tidak menyentuh** database
+pengembangan di 55432.
+
+```bash
+./tes-setup.sh   # 8 tes, database kosong dibuat & dihapus otomatis
 ```
 
 Build produksi dipakai karena mode `next dev` tidak bisa hydrate di lingkungan
@@ -152,7 +162,8 @@ Aturan yang dijaga di kode dan diuji otomatis:
   awalan `' ` agar tidak jadi formula di Excel.
 - Session memakai cookie HMAC; isi sesi disimpan di database sehingga tetap
   valid lintas instance serverless.
-- Halaman `/setup` terkunci permanen setelah admin pertama dibuat.
+- Halaman `/setup` terkunci permanen setelah admin pertama dibuat, dan tidak
+  bisa dibuatkan admin kedua dari sana.
 - Redirect OAuth memakai host dari request (`X-Forwarded-Host`), bukan URL
   internal Next, supaya redirect URI cocok dengan yang didaftarkan di Google.
 
