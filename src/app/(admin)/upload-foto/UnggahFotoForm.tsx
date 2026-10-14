@@ -17,11 +17,13 @@ export function UnggahFotoForm({
   id,
   back,
   kode,
+  csrf,
   sudahAda,
 }: {
   id: string;
   back: string;
   kode: string;
+  csrf: string;
   sudahAda: boolean;
 }) {
   const pathname = useRef('');
@@ -33,6 +35,7 @@ export function UnggahFotoForm({
     if (!pathname.current) return;
     setSibuk(true);
     const fd = new FormData();
+    fd.set('_csrf', csrf);
     fd.set('id', id);
     fd.set('pathname', pathname.current);
     fd.set('nama_file', nama);

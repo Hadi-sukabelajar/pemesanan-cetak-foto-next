@@ -108,6 +108,7 @@ export default async function HalamanUploadFoto({
                     id={String(p.id)}
                     back={back}
                     kode={String(p.kode)}
+                    csrf={token}
                     sudahAda={tabSekarang === 'sudah'}
                   />
                   {tabSekarang === 'sudah' && (
