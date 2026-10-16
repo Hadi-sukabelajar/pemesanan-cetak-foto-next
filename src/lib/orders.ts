@@ -357,6 +357,12 @@ export async function simpanPesanan(
     const daftar = ids.length
       ? await tx.select().from(produk).where(inArray(produk.id, ids))
       : [];
+    // Produk yang sudah dihapus tidak boleh hilang diam-diam.
+    const ketemu = new Set(daftar.map((p) => p.id));
+    const hilang = ids.filter((id) => !ketemu.has(id));
+    if (hilang.length > 0) {
+      throw new Error('Ada produk yang sudah dihapus admin. Muat ulang halaman.');
+    }
     const items: Array<{ produkId: number; nama: string; harga: number; qty: number }> = [];
     let total = 0;
     for (const p of daftar) {
@@ -404,16 +410,24 @@ export async function simpanPesanan(
 
     // --- Perbarui pesanan lama ---
     const [lama] = await tx
-      .select({ statusBayar: pesanan.statusBayar })
+      .select({ status: pesanan.status, statusBayar: pesanan.statusBayar })
       .from(pesanan)
       .where(eq(pesanan.id, idAda))
       .for('update')
       .limit(1);
 
+    if (!lama) {
+      throw new Error('Pesanan tidak ditemukan. Muat ulang halaman.');
+    }
+    if (lama.status === 'dibatalkan') {
+      throw new Error('Pesanan sudah dibatalkan, tidak bisa diubah.');
+    }
+
     // Pesanan yang sudah lunas tidak boleh diubah isinya: uang yang sudah
     // masuk tidak lagi sama dengan tagihan. Yang boleh diubah hanya data
-    // pemesan (nama/kelas/catatan).
-    if (lama?.statusBayar !== 'sudah') {
+    // pemesan (nama/kelas/catatan). Sama untuk yang sudah kirim bukti
+    // (menunggu_verifikasi): isi terkunci sampai admin menolak/mengonfirmasi.
+    if (lama.statusBayar !== 'sudah' && lama.statusBayar !== 'menunggu_verifikasi') {
       await tx.update(pesanan).set({ total }).where(eq(pesanan.id, idAda));
       await tx.delete(pesananItem).where(eq(pesananItem.pesananId, idAda));
       if (items.length) {
@@ -512,7 +526,7 @@ export async function ubahStatus(
   id: number,
   status: string,
 ): Promise<{ ok: boolean; pesan?: string }> {
-  if (!(status in STATUS_PESANAN_LABEL)) {
+  if (!Object.hasOwn(STATUS_PESANAN_LABEL, status)) {
     return { ok: false, pesan: 'Status tidak dikenal.' };
   }
   const db = getDb();
@@ -521,6 +535,9 @@ export async function ubahStatus(
 
   if (p.status === 'dibatalkan') {
     return { ok: false, pesan: 'Pesanan sudah dibatalkan, status tidak bisa diubah.' };
+  }
+  if (status === 'dibatalkan' && p.statusBayar === 'sudah') {
+    return { ok: false, pesan: 'Pesanan yang sudah lunas tidak bisa dibatalkan (uang sudah masuk).' };
   }
   if (status === 'selesai' && p.statusBayar !== 'sudah') {
     return { ok: false, pesan: 'Pesanan belum lunas, tidak bisa ditandai Selesai.' };

@@ -29,7 +29,30 @@ export async function POST(request: NextRequest) {
     jenis?: unknown;
     pesanan_id?: unknown;
   };
-  const aturan = aturanUnggah(raw.jenis ?? 'bukti');
+  // SDK @vercel/blob mengirim { type, payload: { pathname, clientPayload } },
+  // BUKAN { jenis } top-level. Jenis dibaca dari query ?jenis=, lalu
+  // clientPayload, lalu awalan pathname, supaya "hasil/..." tidak jatuh
+  // ke aturan bukti (yang membuat fotografer/admin selalu 401 + dibatasi 2 MB).
+  const bodyPayload =
+    raw && typeof raw === 'object' && 'payload' in raw
+      ? (raw as { payload?: { pathname?: unknown; clientPayload?: unknown } }).payload
+      : undefined;
+  const pathnameReq =
+    typeof bodyPayload?.pathname === 'string' ? (bodyPayload.pathname as string) : '';
+  const clientPayload =
+    typeof bodyPayload?.clientPayload === 'string'
+      ? (bodyPayload.clientPayload as string)
+      : '';
+  const queryJenis = request.nextUrl.searchParams.get('jenis');
+  let jenisReq: unknown = raw.jenis;
+  if (jenisReq !== 'bukti' && jenisReq !== 'hasil') {
+    if (queryJenis === 'bukti' || queryJenis === 'hasil') jenisReq = queryJenis;
+    else if (clientPayload === 'bukti' || clientPayload === 'hasil') jenisReq = clientPayload;
+    else if (pathnameReq.startsWith('hasil/')) jenisReq = 'hasil';
+    else if (pathnameReq.startsWith('bukti/')) jenisReq = 'bukti';
+    else jenisReq = 'bukti';
+  }
+  const aturan = aturanUnggah(jenisReq);
   if (!aturan) {
     return NextResponse.json({ error: 'Jenis unggahan tidak dikenal.' }, { status: 400 });
   }
@@ -61,6 +84,12 @@ export async function POST(request: NextRequest) {
       const nama = p.split('/').pop() ?? '';
       if (!/^[A-Za-z0-9._-]{1,120}$/.test(nama) || nama.includes('..')) {
         throw new Error('Nama berkas tidak valid.');
+      }
+      // Pathname harus satu folder dengan jenis tokennya, supaya token
+      // bukti tidak bisa dipakai mengunggah ke folder hasil (atau sebaliknya).
+      const folderWajib = aturan.label === 'Bukti transfer' ? 'bukti/' : 'hasil/';
+      if (!p.startsWith(folderWajib)) {
+        throw new Error('Folder berkas tidak sesuai jenis unggahan.');
       }
       return {
         allowedContentTypes: aturan.tipe,

@@ -1,9 +1,14 @@
-import { Pool as NeonPool, neon } from '@neondatabase/serverless';
-import { drizzle as drizzleNeonHttp, type NeonHttpDatabase } from 'drizzle-orm/neon-http';
+import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless';
 import { drizzle as drizzleNeonWs } from 'drizzle-orm/neon-serverless';
 import { drizzle as drizzlePg } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
+import ws from 'ws';
 import * as schema from './schema';
+
+// Driver WebSocket Neon butuh konstruktor WebSocket eksplisit di Node.
+if (!neonConfig.webSocketConstructor) {
+  neonConfig.webSocketConstructor = ws as unknown as typeof WebSocket;
+}
 
 // Skrip Node (seed, dll.) tidak memuat .env.local sendiri seperti Next.js,
 // jadi kita baca manual supaya `npm run db:seed` bisa jalan apa adanya.
@@ -17,7 +22,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 /** Tipe database tunggal supaya method chaining konsisten di semua driver. */
-export type Db = NeonHttpDatabase<typeof schema>;
+export type Db = ReturnType<typeof drizzlePg<typeof schema>>;
 
 /**
  * Koneksi database (PostgreSQL).

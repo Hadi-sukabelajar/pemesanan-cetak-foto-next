@@ -101,10 +101,18 @@ export async function aksiHapusPesanan(formData: FormData): Promise<void> {
   } else if (p.statusBayar === 'sudah') {
     await flash('bad', 'Pesanan yang sudah lunas tidak bisa dihapus. Hubungi admin.');
   } else {
+    if (p.buktiTransfer) {
+      const { hapusBlob } = await import('@/lib/blob');
+      await hapusBlob(p.buktiTransfer);
+    }
+    if (p.fotoHasil) {
+      const { hapusBlob } = await import('@/lib/blob');
+      await hapusBlob(p.fotoHasil);
+    }
     await getDb().delete(pesanan).where(eq(pesanan.id, id));
     await flash('ok', `Pesanan ${p.kode} dihapus.`);
   }
-  redirect('/pesanan-saya');
+  redirect(u ? '/pesanan-saya' : '/cek');
 }
 
 /**

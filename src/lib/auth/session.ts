@@ -123,11 +123,20 @@ export const getSesi = cache(async (): Promise<IsiSesi> => {
 
 /** Buat sesi baru (dipakai saat login / daftar). */
 export async function buatSesi(penggunaId?: number): Promise<string> {
+  // Pertahankan data tamu (izin kuitansi dari /cek) supaya alur
+  // tamu -> daftar/masuk tidak kehilangan akses kuitansinya.
+  let bawa: DataSesi = {};
+  try {
+    const lama = await getSesi();
+    if (lama.data?.tamu) bawa = { tamu: lama.data.tamu };
+  } catch {
+    // abaikan — mulai dari sesi kosong
+  }
   const id = crypto.randomUUID();
   await getDb().insert(sesi).values({
     id,
     penggunaId: penggunaId ?? null,
-    data: JSON.stringify({}),
+    data: JSON.stringify(bawa),
     kedaluwarsa: new Date(Date.now() + MAKA),
   });
   const store = await cookies();

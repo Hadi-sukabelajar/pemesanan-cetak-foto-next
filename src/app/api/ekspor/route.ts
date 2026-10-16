@@ -16,11 +16,12 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const sp = Object.fromEntries(url.searchParams);
 
+  const kelasNum = sp.kelas ? Number(sp.kelas) : NaN;
   const syarat: Syarat = {
     cari: (sp.q ?? '').trim() || undefined,
     statusBayar: sp.bayar || undefined,
     status: sp.status || undefined,
-    kelasId: sp.kelas ? Number(sp.kelas) : undefined,
+    kelasId: Number.isInteger(kelasNum) ? kelasNum : undefined,
   };
 
   const baris = await daftarPesanan(syarat, { ambil: 5000 });
@@ -42,24 +43,46 @@ export async function GET(request: Request) {
 
   const esc = (v: unknown): string => {
     let s = String(v ?? '');
-    // Cegah formula injection di Excel/LibreOffice.
-    if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    // Cegah formula injection di Excel/LibreOffice. Uji setelah trim kiri
+    // supaya " =cmd" atau "\t@cmd" tidak lolos prefix check.
+    if (/^[=+\-@\t\r]/.test(s.trimStart())) s = `'${s}`;
     if (/[",\n\r]/.test(s)) s = `"${s.replace(/"/g, '""')}"`;
     return s;
   };
 
-  // Format nama berkas mengikuti versi PHP: date('Ymd-His') -> 20261012-205957.
-  const sekarang = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const waktu =
-    `${sekarang.getUTCFullYear()}${pad(sekarang.getUTCMonth() + 1)}${pad(sekarang.getUTCDate())}` +
-    `-${pad(sekarang.getUTCHours())}${pad(sekarang.getUTCMinutes())}${pad(sekarang.getUTCSeconds())}`;
+  // Format nama berkas mengikuti versi PHP: date('Ymd-His') dalam zona Jakarta.
+  const bagian = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date());
+  const ambil = (t: string) => bagian.find((p) => p.type === t)?.value ?? '00';
+  const waktu = `${ambil('year')}${ambil('month')}${ambil('day')}-${ambil('hour')}${ambil('minute')}${ambil('second')}`;
+
+  const fmtJakarta = (v: unknown): string => {
+    if (v instanceof Date) {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(v);
+    }
+    return String(v ?? '');
+  };
 
   const isi = baris
     .map((p) =>
       [
         p.kode,
-        p.dibuatPada instanceof Date ? p.dibuatPada.toISOString() : p.dibuatPada,
+        fmtJakarta(p.dibuatPada),
         p.nama,
         p.kelasNama,
         p.ringkas,

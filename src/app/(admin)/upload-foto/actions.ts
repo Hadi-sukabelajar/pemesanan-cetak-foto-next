@@ -8,6 +8,7 @@ import { wajibFoto } from '@/lib/auth/rbac';
 import { csrfAman } from '@/lib/auth/csrf';
 import { flash } from '@/lib/flash';
 import { teks, potong } from '@/lib/input';
+import { safeBack } from '@/lib/safe-back';
 import { hapusBlob, validasiPathnameHasil, namaDariBlob } from '@/lib/blob';
 
 /**
@@ -21,7 +22,7 @@ import { hapusBlob, validasiPathnameHasil, namaDariBlob } from '@/lib/blob';
  */
 export async function aksiSimpanFoto(formData: FormData): Promise<void> {
   const u = await wajibFoto();
-  const back = teks(formData.get('back'), '/upload-foto') || '/upload-foto';
+  const back = safeBack(teks(formData.get('back'), '/upload-foto'), '/upload-foto');
 
   if (!(await csrfAman(formData))) redirect(back);
 
@@ -79,7 +80,7 @@ export async function aksiSimpanFoto(formData: FormData): Promise<void> {
  */
 export async function aksiLepasFoto(formData: FormData): Promise<void> {
   await wajibFoto();
-  const back = teks(formData.get('back'), '/upload-foto') || '/upload-foto';
+  const back = safeBack(teks(formData.get('back'), '/upload-foto'), '/upload-foto');
   if (!(await csrfAman(formData))) redirect(back);
 
   const db = getDb();

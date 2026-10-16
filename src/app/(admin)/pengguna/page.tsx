@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { desc, eq, or, sql } from 'drizzle-orm';
 import { wajibAdmin } from '@/lib/auth/rbac';
 import { csrfToken } from '@/lib/auth/csrf';
 import { Ruang } from '@/components/Ruang';
@@ -25,8 +25,12 @@ export default async function HalamanPengguna({
   const token = await csrfToken();
 
   const db = getDb();
+  const aman = cari.replace(/[\\%_]/g, (m) => `\\${m}`);
   const syarat = cari
-    ? or(ilike(pengguna.nama, `%${cari}%`), ilike(pengguna.email, `%${cari}%`))
+    ? or(
+        sql`${pengguna.nama} ILIKE ${`%${aman}%`} ESCAPE '\\'`,
+        sql`${pengguna.email} ILIKE ${`%${aman}%`} ESCAPE '\\'`,
+      )
     : undefined;
 
   const baris = await db

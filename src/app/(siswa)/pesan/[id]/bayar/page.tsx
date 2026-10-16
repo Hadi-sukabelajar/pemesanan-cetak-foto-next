@@ -107,7 +107,7 @@ export default async function HalamanBayar({
       </div>
 
       <p className="center">
-        <Link href="/pesanan-saya">Bayar nanti</Link>
+        <Link href={kembali}>Bayar nanti</Link>
       </p>
     </Ruang>
   );

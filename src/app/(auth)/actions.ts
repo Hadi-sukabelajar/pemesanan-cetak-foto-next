@@ -16,6 +16,7 @@ import {
 } from '@/lib/auth/rate-limit';
 import { teks, potong } from '@/lib/input';
 import { flash } from '@/lib/flash';
+import { teleponSah } from '@/lib/telepon';
 
 /** Server Action: masuk. */
 export async function aksiMasuk(formData: FormData): Promise<void> {
@@ -23,7 +24,7 @@ export async function aksiMasuk(formData: FormData): Promise<void> {
 
   const email = teks(formData.get('email')).toLowerCase();
   const password = teks(formData.get('password'), '');
-  const ip = ipPeminat();
+  const ip = await ipPeminat();
 
   if (email === '' || password === '') {
     await flash('bad', 'Email/username dan password wajib diisi.');
@@ -71,7 +72,8 @@ export async function aksiDaftar(formData: FormData): Promise<void> {
 
   const nama = potong(teks(formData.get('nama')), 100);
   const email = potong(teks(formData.get('email')), 150).toLowerCase();
-  const telepon = potong(teks(formData.get('telepon')), 20);
+  const teleponMasukan = potong(teks(formData.get('telepon')), 20);
+  const telepon = teleponMasukan === '' ? '' : (teleponSah(teleponMasukan) ?? '');
   const kelasId = Number(teks(formData.get('kelas_id'))) || 0;
   const password = teks(formData.get('password'), '');
   const password2 = teks(formData.get('password2'), '');
@@ -83,8 +85,8 @@ export async function aksiDaftar(formData: FormData): Promise<void> {
   }
   if (password.length < 6) errors.push('Password minimal 6 karakter.');
   if (password !== password2) errors.push('Konfirmasi password tidak sama.');
-  if (telepon !== '' && !/^\+?[0-9][0-9 -]{6,18}$/.test(telepon)) {
-    errors.push('Nomor telepon tidak valid (boleh dikosongkan).');
+  if (teleponMasukan !== '' && telepon === '') {
+    errors.push('Nomor HP tidak valid. Gunakan format 08xx (mis. 081234567890).');
   }
 
   const db = getDb();
@@ -139,6 +141,7 @@ export async function aksiDaftar(formData: FormData): Promise<void> {
  * saat render halaman.
  */
 export async function aksiKeluar(formData: FormData): Promise<void> {
+  if (!(await csrfAman(formData))) redirect('/');
   await hancurkanSesi();
   await flash('ok', 'Kamu sudah keluar.');
   redirect('/');

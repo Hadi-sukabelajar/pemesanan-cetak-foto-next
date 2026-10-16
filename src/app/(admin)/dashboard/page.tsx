@@ -30,14 +30,18 @@ export default async function HalamanDashboard() {
   ]);
 
   // Yang masih perluappersetujuan: bukti transfer masuk, atau sudah pilih
-  // metode tapi belum lunas.
+  // metode tapi belum lunas. Pesanan batal disembunyikan (tombol aksi
+  // di bawah pasti gagal untuk yang batal).
   const menunggu = [
-    ...(await daftarPesanan({ statusBayar: 'menunggu_verifikasi' }, { ambil: 20 })),
-    ...(await daftarPesanan({ statusBayar: 'belum' }, { ambil: 20 })),
+    ...(await daftarPesanan(
+      { statusBayar: 'menunggu_verifikasi', kategori: 'semua' },
+      { ambil: 20 },
+    )),
+    ...(await daftarPesanan({ statusBayar: 'belum', kategori: 'semua' }, { ambil: 20 })),
   ].slice(0, 30);
 
-  const totalAntrian = await hitungPesanan({ statusBayar: 'sudah' });
-  const antrian = await daftarPesanan({ statusBayar: 'sudah' }, { urut: 'antrian' });
+  const totalAntrian = await hitungPesanan({ statusBayar: 'sudah', kategori: 'semua' });
+  const antrian = await daftarPesanan({ statusBayar: 'sudah', kategori: 'semua' }, { urut: 'antrian' });
   const back = '/dashboard';
 
   return (

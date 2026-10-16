@@ -194,7 +194,20 @@ export async function aksiSimpanProduk(formData: FormData): Promise<void> {
 export async function aksiHapusProduk(formData: FormData): Promise<void> {
   await wajibAdmin();
   if (!(await csrfAman(formData))) redirect('/produk');
-  await getDb().delete(produk).where(eq(produk.id, Number(teks(formData.get('id'))) || 0));
+  const id = Number(teks(formData.get('id'))) || 0;
+  const { pesananItem } = await import('@/lib/db/schema');
+  const [{ n }] = await getDb()
+    .select({ n: sql<number>`COUNT(*)::int` })
+    .from(pesananItem)
+    .where(eq(pesananItem.produkId, id));
+  if (Number(n) > 0) {
+    await flash(
+      'bad',
+      `Produk masih dipakai ${n} item pesanan, tidak bisa dihapus. Nonaktifkan saja supaya riwayat tetap utuh.`,
+    );
+    redirect('/produk');
+  }
+  await getDb().delete(produk).where(eq(produk.id, id));
   await flash('ok', 'Produk dihapus.');
   redirect('/produk');
 }

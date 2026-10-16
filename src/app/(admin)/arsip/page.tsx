@@ -21,7 +21,9 @@ export default async function HalamanArsip({
   const tabSekarang = tab === 'semua' ? 'semua' : 'siap';
 
   const baris = await daftarPesanan(
-    { cari, arsip: tabSekarang, selesai: tabSekarang === 'siap' ? false : undefined },
+    tabSekarang === 'siap'
+      ? { cari, arsip: 'siap', statusBayar: 'sudah', kategori: 'semua' }
+      : { cari, kategori: 'semua' },
     { ambil: perHal, lewati: (halaman - 1) * perHal, urut: 'antrian' },
   );
 

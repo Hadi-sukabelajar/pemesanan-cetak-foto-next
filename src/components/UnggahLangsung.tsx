@@ -65,14 +65,28 @@ export function UnggahLangsung({
       return;
     }
 
+    // Nama file dari HP/kamera sering berisi spasi & kurung
+    // ("bukti transfer.jpg", "Screenshot (1).png") yang ditolak regex
+    // server. Amankan di sini supaya unggahan normal tidak gagal.
+    const aman = (file.name.split('/').pop() ?? 'berkas')
+      .normalize('NFKD')
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^[-.]+|[-.]+$/g, '')
+      .slice(0, 80) || 'berkas';
+    const ext = aman.includes('.') ? (aman.split('.').pop() ?? '').toLowerCase() : '';
+    const namaAman = ext ? aman : `${aman}.jpg`;
+
     setSibuk(true);
     setStatus('Mengunggah...');
     try {
-      const hasil = await upload(`${folder}/${file.name}`, file, {
+      const hasil = await upload(`${folder}/${namaAman}`, file, {
         access: 'private',
-        // pesanan_id dikirim lewat query string karena badan request ini
-        // dipakai sendiri oleh pustaka @vercel/blob.
-        handleUploadUrl: `/api/unggah-token?pesanan_id=${pesananId ?? ''}`,
+        // pesanan_id + jenis dikirim lewat query string DAN clientPayload
+        // karena badan request ini dipakai sendiri oleh pustaka @vercel/blob
+        // ({ type, payload: { pathname, clientPayload } } — tanpa field jenis).
+        handleUploadUrl: `/api/unggah-token?pesanan_id=${pesananId ?? ''}&jenis=${folder}`,
+        clientPayload: folder,
         onUploadProgress: ({ percentage }: { percentage: number }) => {
           setStatus(`Mengunggah... ${Math.round(percentage)}%`);
         },

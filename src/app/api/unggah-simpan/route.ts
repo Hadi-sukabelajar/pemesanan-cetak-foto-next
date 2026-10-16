@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   };
 
   if (!aturan.valid(pathname)) {
-    return NextResponse.json({ ok: false, pesan: 'Berkas tidak dikenali.' }, { status: 400 });
+    return tolak('Berkas tidak dikenali.');
   }
 
   // 1. Ukuran
@@ -79,15 +79,40 @@ export async function POST(request: Request) {
     const stream = hasil.stream;
     if (!stream) return tolak('Berkas tidak bisa dibaca.');
     const reader = stream.getReader();
-    const potongan = await reader.read();
-    const awal = new Uint8Array(potongan.value ?? new ArrayBuffer(0));
-    const terdeteksi = deteksiJenis(awal);
-    if (!terdeteksi) return tolak('Format berkas harus JPG, PNG, WEBP, atau PDF.');
+    try {
+      // Stream bisa mengembalikan chunk kecil (<12 byte) pada read pertama,
+      // jadi kumpulkan sampai 12 byte atau stream selesai supaya deteksi
+      // magic bytes tidak menolak berkas valid secara acak.
+      const kumpul: number[] = [];
+      for (;;) {
+        const potongan = await reader.read();
+        if (potongan.value) {
+          const u8 = potongan.value as unknown as Uint8Array;
+          for (let i = 0; i < u8.length && kumpul.length < 12; i++) kumpul.push(u8[i]!);
+        }
+        if (potongan.done || kumpul.length >= 12) break;
+      }
+      const awal = new Uint8Array(kumpul);
+      const terdeteksi = deteksiJenis(awal);
+      if (!terdeteksi) {
+        return tolak(
+          raw.jenis === 'hasil'
+            ? 'Format foto harus JPG, PNG, atau WEBP.'
+            : 'Format berkas harus JPG, PNG, WEBP, atau PDF.',
+        );
+      }
 
-    // Foto hasil harus gambar; bukti transfer boleh PDF.
-    const bolehPdf = terdeteksi.ext === 'pdf';
-    if (!bolehPdf && !['jpg', 'png', 'webp'].includes(terdeteksi.ext)) {
-      return tolak('Format berkas harus JPG, PNG, WEBP, atau PDF.');
+      // Foto hasil harus gambar; bukti transfer boleh PDF.
+      if (raw.jenis === 'hasil' && terdeteksi.ext === 'pdf') {
+        return tolak('Format foto harus JPG, PNG, atau WEBP.');
+      }
+    } finally {
+      try {
+        await reader.cancel();
+      } catch {
+        // abaikan
+      }
+      reader.releaseLock();
     }
   } catch {
     return tolak('Berkas tidak bisa diperiksa.');

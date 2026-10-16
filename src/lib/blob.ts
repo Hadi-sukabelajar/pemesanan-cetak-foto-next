@@ -46,7 +46,10 @@ export type JenisUnggahan = 'bukti' | 'hasil';
  */
 export function deteksiJenis(byteAwal: Uint8Array): { ext: string; mime: string } | null {
   for (const j of JENIS) {
-    if (byteAwal.length >= 12 && j.cocok(byteAwal)) {
+    // Syarat panjang mengikuti kebutuhan tiap format (jpg 3, png/pdf 4,
+    // webp 12) supaya chunk kecil dari stream tidak ditolak.
+    const butuh = j.ext === 'webp' ? 12 : j.ext === 'jpg' ? 3 : 4;
+    if (byteAwal.length >= butuh && j.cocok(byteAwal)) {
       return { ext: j.ext, mime: j.mime };
     }
   }
@@ -191,7 +194,7 @@ function pathnameValid(pathname: string, folder: string, ekstensi: string): bool
   if (nama.includes('/') || nama.includes('..')) return false;
   if (nama.includes('\\') || /[\r\n\0]/.test(nama)) return false;
 
-  return new RegExp(`^[A-Za-z0-9][A-Za-z0-9._-]*\\.(${ekstensi})$`).test(nama);
+  return new RegExp(`^[A-Za-z0-9][A-Za-z0-9._-]*\\.(${ekstensi})$`, 'i').test(nama);
 }
 
 export function validasiPathnameBukti(pathname: string): boolean {

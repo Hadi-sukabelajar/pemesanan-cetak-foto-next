@@ -12,9 +12,12 @@ import {
   penggunaTerbaru,
   antrianSekarang,
 } from '@/lib/query-admin';
-import { rupiah, tgl } from '@/lib/format';
+import { rupiah, tgl, kapital } from '@/lib/format';
 
 export const metadata: Metadata = { title: 'Monitor' };
+
+// Data segar tiap 60 detik (melengkapi meta refresh di bawah).
+export const revalidate = 60;
 
 export default async function HalamanMonitor() {
   const u = await wajibStaf();
@@ -213,7 +216,7 @@ export default async function HalamanMonitor() {
                   {p.metode ? (
                     <>
                       <br />
-                      <span className="muted">{p.metode as string}</span>
+                      <span className="muted">{kapital(p.metode as string)}</span>
                     </>
                   ) : null}
                 </td>

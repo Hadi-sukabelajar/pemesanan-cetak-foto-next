@@ -10,6 +10,7 @@
 import 'server-only';
 import { eq, lt, sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
+import { headers } from 'next/headers';
 import { getDb } from '@/lib/db';
 import { percobaanLogin } from '@/lib/db/schema';
 
@@ -21,10 +22,19 @@ function kunci(ip: string, email: string): string {
   return createHash('sha256').update(`${ip}|${email.toLowerCase()}`).digest('hex');
 }
 
-export function ipPeminat(): string {
-  // Di Vercel, forwarded-for sudah diisi platform.
-  const fwd = process.env.VERCEL_FORWARDED_FOR ?? '';
-  return fwd.split(',')[0]?.trim() || process.env.REMOTE_ADDR || 'unknown';
+export async function ipPeminat(): Promise<string> {
+  // Di App Router IP klien datang lewat header forward, bukan env.
+  try {
+    const h = await headers();
+    const fwd = h.get('x-forwarded-for') ?? '';
+    const pertama = fwd.split(',')[0]?.trim();
+    if (pertama) return pertama.slice(0, 45);
+    const real = h.get('x-real-ip')?.trim();
+    if (real) return real.slice(0, 45);
+  } catch {
+    // di luar request (tes/cron) — jatuh ke bawah
+  }
+  return process.env.VERCEL_FORWARDED_FOR?.split(',')[0]?.trim() || 'unknown';
 }
 
 function sudahLewatWaktu(terakhir: Date): boolean {

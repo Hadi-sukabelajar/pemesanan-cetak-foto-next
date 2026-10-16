@@ -8,8 +8,7 @@ import { wajibAdmin } from '@/lib/auth/rbac';
 import { csrfAman } from '@/lib/auth/csrf';
 import { flash } from '@/lib/flash';
 import { teks } from '@/lib/input';
-import { validasiPesanan, simpanPesanan, konfirmasiBayar } from '@/lib/orders';
-import { STATUS_PESANAN_LABEL } from '@/lib/orders';
+import { validasiPesanan, simpanPesanan, konfirmasiBayar, ubahStatus, setNamaFile } from '@/lib/orders';
 
 /**
  * Simpan pesanan dari form admin (transaksi offline / ubah pesanan).
@@ -43,15 +42,19 @@ export async function aksiSimpanTransaksi(formData: FormData): Promise<void> {
   }
 
   if (id && lama) {
-    // Status & nama file hanya untuk mode edit.
+    // Status & nama file hanya untuk mode edit. Status wajib lewat
+    // ubahStatus() supaya aturan "batal tidak bisa hidup lagi" dan
+    // "selesai wajib lunas" tetap berlaku.
     const st = teks(formData.get('status'));
     const namaFile = teks(formData.get('nama_file')).slice(0, 150);
-    if (st in STATUS_PESANAN_LABEL) {
-      await db
-        .update(pesanan)
-        .set({ status: st as never, namaFile: namaFile === '' ? null : namaFile })
-        .where(eq(pesanan.id, baru));
+    if (st !== '') {
+      const hasilStatus = await ubahStatus(baru, st);
+      if (!hasilStatus.ok) {
+        await flash('bad', hasilStatus.pesan ?? 'Status tidak bisa diubah.');
+        redirect(`/transaksi/${baru}`);
+      }
     }
+    await setNamaFile(baru, namaFile === '' ? null : namaFile);
     await flash('ok', 'Pesanan diperbarui.');
     redirect(`/transaksi/${baru}`);
   }
@@ -66,6 +69,8 @@ export async function aksiSimpanTransaksi(formData: FormData): Promise<void> {
         'ok',
         `Transaksi tersimpan & LUNAS (${bayar === 'cash' ? 'Cash' : 'Transfer'}). Nomor antrian: ${p?.noAntrian}`,
       );
+    } else {
+      await flash('bad', hasilBayar.pesan ?? 'Pembayaran gagal dikonfirmasi.');
     }
   } else {
     await flash('ok', 'Transaksi tersimpan (belum bayar). Konfirmasi pembayaran dari Dashboard.');

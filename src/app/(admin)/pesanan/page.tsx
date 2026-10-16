@@ -22,11 +22,12 @@ export default async function HalamanPesanan({
   await wajibAdmin();
   const sp = await searchParams;
 
+  const kelasNum = sp.kelas ? Number(sp.kelas) : NaN;
   const syarat: Syarat = {
     cari: (sp.q ?? '').trim() || undefined,
     statusBayar: sp.bayar || undefined,
     status: sp.status || undefined,
-    kelasId: sp.kelas ? Number(sp.kelas) : undefined,
+    kelasId: Number.isInteger(kelasNum) ? kelasNum : undefined,
   };
 
   const [token, kelas] = await Promise.all([csrfToken(), semuaKelas()]);

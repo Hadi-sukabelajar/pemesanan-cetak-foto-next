@@ -1,7 +1,7 @@
 /**
  * Token CSRF dengan pola double-submit.
  *
- * Middleware (src/middleware.ts) assures cookie `fp_csrf` selalu ada, lalu
+ * Proxy (src/proxy.ts) memastikan cookie `fp_csrf` selalu ada, lalu
  * nilainya yang sama dimasukkan ke setiap form. Server Actions membandingkan
  * nilai di form dengan nilai di cookie.
  *

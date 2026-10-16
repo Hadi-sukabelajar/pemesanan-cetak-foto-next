@@ -23,7 +23,7 @@ export async function statistikDashboard() {
       belum: sql<number>`COUNT(*) FILTER (WHERE ${pesanan.statusBayar} = 'belum' AND ${pesanan.status} <> 'dibatalkan')::int`,
       verifikasi: sql<number>`COUNT(*) FILTER (WHERE ${pesanan.statusBayar} = 'menunggu_verifikasi' AND ${pesanan.status} <> 'dibatalkan')::int`,
       lunas: sql<number>`COUNT(*) FILTER (WHERE ${LUNAS_AKTIF})::int`,
-      siapCetak: sql<number>`COUNT(*) FILTER (WHERE ${pesanan.status} = 'siap_cetak')::int`,
+      siapCetak: sql<number>`COUNT(*) FILTER (WHERE ${LUNAS_AKTIF} AND ${pesanan.status} = 'siap_cetak')::int`,
       pendapatan: sql<number>`COALESCE(SUM(${pesanan.total}) FILTER (WHERE ${LUNAS_AKTIF}), 0)::int`,
     })
     .from(pesanan);
@@ -46,7 +46,7 @@ export async function statistikMonitor() {
       belum: sql<number>`COUNT(*) FILTER (WHERE ${pesanan.statusBayar} = 'belum' AND ${pesanan.status} <> 'dibatalkan')::int`,
       verifikasi: sql<number>`COUNT(*) FILTER (WHERE ${pesanan.statusBayar} = 'menunggu_verifikasi' AND ${pesanan.status} <> 'dibatalkan')::int`,
       lunas: sql<number>`COUNT(*) FILTER (WHERE ${LUNAS_AKTIF})::int`,
-      siapCetak: sql<number>`COUNT(*) FILTER (WHERE ${pesanan.status} = 'siap_cetak')::int`,
+      siapCetak: sql<number>`COUNT(*) FILTER (WHERE ${LUNAS_AKTIF} AND ${pesanan.status} = 'siap_cetak')::int`,
       pendapatan: sql<number>`COALESCE(SUM(${pesanan.total}) FILTER (WHERE ${LUNAS_AKTIF}), 0)::int`,
       menunggu: sql<number>`COUNT(*) FILTER (WHERE ${pesanan.status} = 'menunggu')::int`,
       diproses: sql<number>`COUNT(*) FILTER (WHERE ${pesanan.status} = 'diproses')::int`,
@@ -137,13 +137,17 @@ export function syaratPesanan(s: Syarat) {
   const syarat: ReturnType<typeof and>[] = [];
 
   if (s.cari) {
+    // Escape wildcard LIKE supaya "%" / "_" dari input hanya dicari harfiah.
+    const aman = s.cari.replace(/[\\%_]/g, (m) => `\\${m}`);
     syarat.push(
-      sql`(${pesanan.kode} ILIKE ${`%${s.cari}%`} OR ${pesanan.nama} ILIKE ${`%${s.cari}%`})`,
+      sql`(${pesanan.kode} ILIKE ${`%${aman}%`} ESCAPE '\\' OR ${pesanan.nama} ILIKE ${`%${aman}%`} ESCAPE '\\')`,
     );
   }
   if (s.statusBayar) syarat.push(eq(pesanan.statusBayar, s.statusBayar as never));
   if (s.status) syarat.push(eq(pesanan.status, s.status as never));
-  if (s.kelasId) syarat.push(eq(pesanan.kelasId, s.kelasId));
+  if (typeof s.kelasId === 'number' && Number.isInteger(s.kelasId)) {
+    syarat.push(eq(pesanan.kelasId, s.kelasId));
+  }
 
   switch (s.kategori) {
     case 'pending':
@@ -173,11 +177,14 @@ export function syaratPesanan(s: Syarat) {
   }
 
   // Tanggal memakai tanggal bayar, fallback ke tanggal pesanan.
+  // Bandingkan sebagai tanggal Jakarta (bukan timestamptz UTC) supaya
+  // filter dari/sampai tidak meleset 7 jam di batas hari.
   const tglsql = sql`COALESCE(${pesanan.dibayarPada}, ${pesanan.dibuatPada})`;
-  if (s.dari) syarat.push(sql`${tglsql} >= ${s.dari}::timestamptz`);
+  const tglJakarta = sql`(${tglsql} AT TIME ZONE 'Asia/Jakarta')::date`;
+  if (s.dari) syarat.push(sql`${tglJakarta} >= ${s.dari}::date`);
   if (s.sampai) {
     // "sampai" berarti sepanjang hari itu juga.
-    syarat.push(sql`${tglsql} < (${s.sampai}::date + INTERVAL '1 day')`);
+    syarat.push(sql`${tglJakarta} <= ${s.sampai}::date`);
   }
 
   return and(...syarat);
@@ -253,7 +260,7 @@ export async function antrianSekarang() {
     })
     .from(pesanan)
     .where(sql`${pesanan.statusBayar} = 'sudah' AND ${pesanan.status} NOT IN ('selesai','dibatalkan')`)
-    .orderBy(asc(pesanan.noAntrian))
+    .orderBy(sql`${pesanan.noAntrian} ASC NULLS LAST`)
     .limit(1);
 
   const { nomorAntrianTerakhir } = await import('@/lib/orders');
@@ -263,16 +270,25 @@ export async function antrianSekarang() {
 /** Omzet per hari (halaman Riwayat & Penghasilan). */
 export async function penghasilanPerHari(s: Syarat = {}) {
   const tglsql = sql`COALESCE(${pesanan.dibayarPada}, ${pesanan.dibuatPada})`;
+  const hariJakarta = sql`TO_CHAR(${tglsql} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD')`;
+  // Hanya hitung yang lunas & tidak dibatalkan, sama seperti rekap.
+  const tambahan = syaratPesanan({
+    ...s,
+    selesai: false,
+    kategori: undefined,
+    status: undefined,
+    statusBayar: undefined,
+  });
   return getDb()
     .select({
-      hari: sql<string>`TO_CHAR(${tglsql}, 'YYYY-MM-DD')`,
+      hari: sql<string>`${hariJakarta}`,
       jml: sql<number>`COUNT(*)::int`,
       uang: sql<number>`COALESCE(SUM(${pesanan.total}), 0)::int`,
     })
     .from(pesanan)
-    .where(syaratPesanan(s))
-    .groupBy(sql`TO_CHAR(${tglsql}, 'YYYY-MM-DD')`)
-    .orderBy(sql`TO_CHAR(${tglsql}, 'YYYY-MM-DD') DESC`)
+    .where(and(LUNAS_AKTIF, tambahan))
+    .groupBy(sql`${hariJakarta}`)
+    .orderBy(sql`${hariJakarta} DESC`)
     .limit(60);
 }
 

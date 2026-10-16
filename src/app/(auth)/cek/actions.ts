@@ -27,7 +27,7 @@ export async function aksiCekPesanan(formData: FormData): Promise<void> {
 
   const kode = teks(formData.get('kode')).toUpperCase().slice(0, 30);
   const telepon = normalTelepon(teks(formData.get('telepon')).slice(0, 20));
-  const ip = ipPeminat();
+  const ip = await ipPeminat();
 
   if (kode === '' || telepon === '') {
     await flash('bad', 'Kode pesanan dan nomor HP wajib diisi.');

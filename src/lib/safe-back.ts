@@ -30,8 +30,20 @@ export function jalurInternalAman(path: string): boolean {
   if (path.includes('\\')) return false;
 
   // Periksa bentuk asli dan bentuk yang sudah di-decode, supaya
-  // "/%2e%2e/" tidak lolos.
-  for (const bentuk of [path, decodeURIComponent(path), decodeURIComponent(decodeURIComponent(path))]) {
+  // "/%2e%2e/" tidak lolos. decodeURIComponent bisa melempar URIError
+  // untuk input seperti "%" — tangkap dan anggap tidak aman.
+  const amanDecode = (s: string): string | null => {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return null;
+    }
+  };
+  const sekali = amanDecode(path);
+  if (sekali === null) return false;
+  const duaKali = amanDecode(sekali);
+  if (duaKali === null) return false;
+  for (const bentuk of [path, sekali, duaKali]) {
     if (KARAK_KONTROL.test(bentuk)) return false;
     if (bentuk.startsWith('//') || bentuk.includes('\\')) return false;
     if (TRAVERSAL.test(bentuk)) return false;
